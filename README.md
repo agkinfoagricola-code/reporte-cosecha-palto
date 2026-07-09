@@ -17,26 +17,26 @@ El usuario ingresa solo su nombre de usuario (ej. `jguevara`) — el sistema arm
 
 1. Crea una cuenta y un proyecto en [supabase.com](https://supabase.com) (la capa gratuita alcanza de sobra para pocos usuarios).
 2. **SQL Editor → New query** → pega todo el contenido de `supabase_setup.sql` (está en este repo) → **Run**. Esto crea las tablas, los roles (`admin`/`viewer`) y los permisos (RLS).
-3. **Authentication → Providers → Email** → apaga **"Confirm email"**. Esto es obligatorio: usamos correos internos como `jguevara@agrokasa.com.pe` que no reciben emails reales, así que no puede quedar pendiente una confirmación por correo.
-4. **Authentication → Settings** → si quieres, desactiva "Allow new users to sign up" (igual no importa mucho, porque solo el admin puede crear usuarios desde dentro de la app).
-5. **Authentication → Users → Add user** → crea el primer usuario (el admin) a mano:
+3. **Authentication → Users → Add user** → crea el primer usuario (el admin) a mano:
    - Email: `jguevara@agrokasa.com.pe`
    - Password: `jguevara28`
-6. **SQL Editor** → vuélvelo admin:
+   - Marca **"Auto Confirm User"** si aparece esa opción (así entra de inmediato).
+4. **SQL Editor** → vuélvelo admin:
    ```sql
    update profiles set role = 'admin' where email = 'jguevara@agrokasa.com.pe';
    ```
-7. **Project Settings → API** → copia el **Project URL** y el **anon public key**.
-8. Abre `index.html`, busca (`Ctrl+F`) estas dos líneas cerca del inicio del `<script>` y reemplázalas con tus valores reales:
+5. **Project Settings → API Keys** → copia el **Project URL** y la **Publishable key** (antes llamada "anon key").
+6. Abre `index.html`, busca (`Ctrl+F`) estas dos líneas cerca del inicio del `<script>` y reemplázalas con tus valores reales:
    ```js
-   const SUPABASE_URL = 'https://nzgrllrmflnpzumaksgr.supabase.co';
-   const SUPABASE_ANON_KEY = 'sb_publishable_YXAHBYS68J-UEoVW6zmpFg_mho_V3To';
+   const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
+   const SUPABASE_ANON_KEY = 'TU-ANON-KEY';
    ```
-   (La `anon key` es pública por diseño — la seguridad la dan las políticas RLS del paso 2, no esta llave.)
+   (Esta llave es pública por diseño — la seguridad la dan las políticas RLS del paso 2, no esta llave.)
 
 Con esto ya puedes entrar con `jguevara` / `jguevara28`. Desde la página **"Usuarios"** del panel,
 jguevara puede crear a `cvalverde` (y a cualquier otro) sin volver a tocar Supabase — quedan como
-`viewer` por defecto.
+`viewer`, **ya confirmados**, y pueden entrar de inmediato (la creación pasa por la función segura
+`/api/create-user.js`, que no depende del switch "Confirm email" del proyecto — ver sección 4).
 
 ---
 
@@ -72,16 +72,21 @@ un nombre → **no** marques "Add a README" → copia la URL que te da y úsala 
 
 1. Ve a [vercel.com](https://vercel.com) → **Sign Up** → "Continue with GitHub".
 2. **Add New... → Project** → autoriza acceso a GitHub si te lo pide → selecciona tu repo → **Import**.
-3. Configuración: **Framework Preset: Other**, Build Command y Output Directory **en blanco** (Vercel sirve `index.html` directo desde la raíz, no hay build).
-4. **Deploy**. En menos de un minuto te da una URL tipo `https://reporte-cosecha-palto.vercel.app` — ese es el link que compartes.
-5. Cada vez que hagas `git push` a `main`, Vercel vuelve a publicar solo.
+3. Configuración: **Framework Preset: Other**. Deja Build Command y Output Directory en blanco — Vercel detecta `index.html` en la raíz y la carpeta `api/` sola, no hace falta configurar nada más.
+4. **Antes de darle Deploy** (o justo después, y luego rehaces el deploy), agrega dos variables de entorno — pestaña **"Environment Variables"** en esa misma pantalla de importación (o después en Project Settings → Environment Variables):
+   - `SUPABASE_URL` = `https://nzgrllrmflnpzumaksgr.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` = la **service_role key** (Supabase → Project Settings → API Keys → pestaña "Legacy anon, service_role API keys" → copia la que dice `service_role`, **no** la publishable).
+
+   ⚠️ **Esta llave nunca va en el `index.html` ni en ningún archivo del repo** — solo aquí, como variable de entorno de Vercel. Es la que le da poder de administrador a la función `/api/create-user.js`, así que si se filtra, cualquiera podría controlar toda tu base de datos.
+5. **Deploy**. En menos de un minuto te da una URL tipo `https://reporte-cosecha-palto.vercel.app` — ese es el link que compartes.
+6. Cada vez que hagas `git push` a `main`, Vercel vuelve a publicar solo. Si agregas las variables de entorno **después** del primer deploy, tienes que forzar un redeploy (pestaña Deployments → "..." del último deploy → "Redeploy") para que las tome.
 
 ---
 
 ## 5. Uso diario
 
 - **Alimentar datos nuevos** (solo admin): página **"Carga de Datos"** → pega el CSV de balanza y/o hectáreas (mismos encabezados que los archivos originales) → **"Guardar y aplicar"**. Se guarda en Supabase y lo ven todos.
-- **Crear un usuario nuevo** (solo admin): página **"Usuarios"** → nombre de usuario + contraseña → queda como `viewer`. Para volver a alguien `admin`, hazlo por SQL Editor (paso 1.6, con su correo).
+- **Crear un usuario nuevo** (solo admin): página **"Usuarios"** → nombre de usuario + contraseña → queda como `viewer`, **ya confirmado** (puede entrar de inmediato, sin depender de ningún switch de Supabase). Para volver a alguien `admin`, hazlo por SQL Editor (paso 1.4, con su correo).
 - **Responsive**: en pantallas angostas (celular/tablet) aparece un botón ☰ arriba a la izquierda que abre/cierra el menú lateral.
 
 ---

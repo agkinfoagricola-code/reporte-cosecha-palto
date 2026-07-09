@@ -56,6 +56,11 @@ create policy "usuarios ven su propio perfil"
   on profiles for select
   using (auth.uid() = id);
 
+-- Un admin puede ver TODOS los perfiles (para la página "Usuarios" del panel)
+create policy "admin ve todos los perfiles"
+  on profiles for select
+  using (exists (select 1 from profiles p2 where p2.id = auth.uid() and p2.role = 'admin'));
+
 -- Cualquier usuario logueado puede LEER los datos de cosecha
 create policy "usuarios logueados leen balanza"
   on balanza_data for select

@@ -242,13 +242,22 @@
   .login-card .brandmark h1{ font-family:var(--font-display); color:var(--aguacate); font-size:19px; margin:0; line-height:1.15; }
   .login-card .brandmark small{ font-family:var(--font-mono); font-size:10.5px; color:#8a8f83; letter-spacing:.04em; }
   .login-field{
-    display:flex; align-items:center; background:#F1F3F1; border-radius:9px; padding:2px 12px; margin-bottom:12px;
+    display:flex; align-items:center; gap:8px; background:#F1F3F1; border-radius:9px; padding:2px 12px;
+    margin-bottom:14px; border:1.5px solid transparent; transition:border-color .15s ease, background .15s ease;
   }
+  .login-field:focus-within{ border-color:var(--pulpa); background:#fff; }
+  .login-field .login-icon{ width:17px; height:17px; flex-shrink:0; }
   .login-field input{
     flex:1; border:none; background:transparent; font-family:var(--font-body); font-size:14px;
     padding:11px 4px; outline:none; min-width:0;
   }
   .login-field .suffix{ font-family:var(--font-mono); font-size:12.5px; color:#8a8f83; white-space:nowrap; }
+  .toggle-pass{
+    background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; flex-shrink:0;
+    opacity:.7;
+  }
+  .toggle-pass:hover{ opacity:1; }
+  .toggle-pass svg{ width:18px; height:18px; }
   .login-forgot{ font-size:12.5px; color:var(--aguacate); text-decoration:none; display:inline-block; margin:2px 0 16px 0; cursor:pointer; }
   .login-card button.btn-primary{ width:100%; padding:12px; font-size:14px; background:var(--pulpa-deep); }
   .login-version{ text-align:center; font-family:var(--font-mono); font-size:11px; color:#aab0a5; margin-top:14px; }
@@ -295,11 +304,16 @@
         </div>
       </div>
       <div class="login-field">
+        <svg class="login-icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="6.5" r="3.5" stroke="#8a8f83" stroke-width="1.4"/><path d="M3 17c0-3.5 3.1-6 7-6s7 2.5 7 6" stroke="#8a8f83" stroke-width="1.4" stroke-linecap="round"/></svg>
         <input type="text" id="loginUsuario" placeholder="Usuario" autocomplete="username">
         <span class="suffix">@agrokasa.com.pe</span>
       </div>
       <div class="login-field">
+        <svg class="login-icon" viewBox="0 0 20 20" fill="none"><rect x="4.5" y="8.5" width="11" height="7.5" rx="1.6" stroke="#8a8f83" stroke-width="1.4"/><path d="M6.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5" stroke="#8a8f83" stroke-width="1.4"/></svg>
         <input type="password" id="loginPassword" placeholder="Contraseña" autocomplete="current-password">
+        <button type="button" class="toggle-pass" id="togglePass" aria-label="Mostrar contraseña">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M1.5 10S4.5 4.5 10 4.5 18.5 10 18.5 10 15.5 15.5 10 15.5 1.5 10 1.5 10Z" stroke="#8a8f83" stroke-width="1.4"/><circle cx="10" cy="10" r="2.5" stroke="#8a8f83" stroke-width="1.4"/></svg>
+        </button>
       </div>
       <a class="login-forgot" id="forgotLink">¿Olvidaste tu contraseña?</a>
       <button class="btn btn-primary" id="loginBtn">Ingresar</button>
@@ -360,13 +374,8 @@
   <!-- PAGE 0: INICIO -->
   <section class="page active" id="page-inicio">
     <div class="panel">
-      <h3>Bienvenido</h3>
-      <p style="margin:0; font-size:13.5px; color:#555; line-height:1.6;">
-        Este es el panel principal del reporte de cosecha de palto del Fundo Las Mercedes, campaña 2026.
-        Usa el menú <b>Reportes</b> de la izquierda para ver el detalle de kilos cosechados, el avance
-        contra lo planificado, el detalle de bins, y la comparación de kg/ha real vs presupuesto por
-        lote-red y por sector. Las tarjetas de arriba y el filtro de variedad aplican a todas las páginas.
-      </p>
+      <h3>Resumen de campaña</h3>
+      <div id="inicioResumen"></div>
     </div>
   </section>
 
@@ -481,23 +490,29 @@
 
   <!-- PAGE 7: USUARIOS (solo admin) -->
   <section class="page" id="page-usuarios">
-    <div class="panel form-card" style="max-width:460px;">
-      <h3>Crear usuario</h3>
-      <p style="font-size:13px; color:#555; margin:0; line-height:1.5;">
-        El usuario nuevo queda con rol <b>viewer</b> (solo visualizar). Para volverlo admin, hazlo desde
-        el SQL Editor de Supabase.
-      </p>
-      <label>Usuario</label>
-      <div class="login-field" style="background:#F1F3F1;">
-        <input type="text" id="newUserName" placeholder="ej. cvalverde">
-        <span class="suffix">@agrokasa.com.pe</span>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Usuarios registrados</h3>
+        <div class="tablewrap"><table class="userlist" id="tableUsuarios"></table></div>
       </div>
-      <label>Contraseña</label>
-      <input type="text" id="newUserPass" placeholder="mínimo 6 caracteres">
-      <div class="actions">
-        <button class="btn btn-primary" id="createUserBtn">Crear usuario</button>
+      <div class="panel form-card">
+        <h3>Crear usuario</h3>
+        <p style="font-size:13px; color:#555; margin:0; line-height:1.5;">
+          El usuario nuevo queda con rol <b>viewer</b> (solo visualizar). Para volverlo admin, hazlo desde
+          el SQL Editor de Supabase.
+        </p>
+        <label>Usuario</label>
+        <div class="login-field" style="background:#F1F3F1;">
+          <input type="text" id="newUserName" placeholder="ej. cvalverde">
+          <span class="suffix">@agrokasa.com.pe</span>
+        </div>
+        <label>Contraseña</label>
+        <input type="text" id="newUserPass" placeholder="mínimo 6 caracteres">
+        <div class="actions">
+          <button class="btn btn-primary" id="createUserBtn">Crear usuario</button>
+        </div>
+        <div class="status-msg" id="userStatus"></div>
       </div>
-      <div class="status-msg" id="userStatus"></div>
     </div>
   </section>
 
@@ -532,7 +547,7 @@ const pct = n => (n*100).toLocaleString('es-PE', {maximumFractionDigits:1}) + '%
 // Reemplaza estos dos valores con los de tu proyecto de Supabase
 // (Project Settings → API → Project URL / anon public key).
 const SUPABASE_URL = 'https://nzgrllrmflnpzumaksgr.supabase.co';
-   const SUPABASE_ANON_KEY = 'sb_publishable_YXAHBYS68J-UEoVW6zmpFg_mho_V3To';
+const SUPABASE_ANON_KEY = 'sb_publishable_YXAHBYS68J-UEoVW6zmpFg_mho_V3To';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ============ AUTH ============ */
@@ -595,10 +610,18 @@ document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 document.getElementById('forgotLink').addEventListener('click', ()=>{
   alert('Contacta a tu administrador para restablecer tu contraseña.');
 });
+document.getElementById('togglePass').addEventListener('click', ()=>{
+  const inp = document.getElementById('loginPassword');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+});
 
 /* Crea usuarios sin cerrar la sesión del admin actual: llama directo al endpoint
    de signup de Supabase (con la anon key) en vez de usar sb.auth.signUp(), que
    reemplazaría la sesión activa del navegador por la del usuario nuevo. */
+/* Crea usuarios YA CONFIRMADOS llamando a la función de servidor /api/create-user
+   (que usa la service_role key de forma segura, solo en el servidor). Esto evita
+   por completo el problema de "Email not confirmed" — ya no depende del switch
+   "Confirm email" de Supabase. */
 async function createUser(){
   const statusEl = document.getElementById('userStatus');
   statusEl.className = 'status-msg'; statusEl.textContent = '';
@@ -612,21 +635,44 @@ async function createUser(){
   }
   const email = usuario + EMAIL_DOMAIN;
   try{
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+    const { data: sessionData } = await sb.auth.getSession();
+    const token = sessionData && sessionData.session ? sessionData.session.access_token : null;
+    if(!token) throw new Error('Tu sesión expiró, vuelve a ingresar.');
+
+    const res = await fetch('/api/create-user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: JSON.stringify({ email, password: pass })
     });
     const data = await res.json();
-    if(!res.ok){ throw new Error(data.msg || data.error_description || 'No se pudo crear el usuario.'); }
-    statusEl.className='status-msg ok'; statusEl.textContent = `Usuario "${usuario}" creado como viewer.`;
+    if(!res.ok){ throw new Error(data.error || 'No se pudo crear el usuario.'); }
+    statusEl.className='status-msg ok'; statusEl.textContent = `Usuario "${usuario}" creado como viewer (ya confirmado, puede ingresar de inmediato).`;
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserPass').value = '';
+    loadUsersList();
   }catch(err){
     statusEl.className='status-msg err'; statusEl.textContent = 'Error: ' + err.message;
   }
 }
 document.getElementById('createUserBtn').addEventListener('click', createUser);
+
+async function loadUsersList(){
+  const el = document.getElementById('tableUsuarios');
+  el.innerHTML = '<tr><th>Usuario</th><th>Rol</th></tr><tr><td colspan="2">Cargando…</td></tr>';
+  try{
+    const { data, error } = await sb.from('profiles').select('email, role').order('email');
+    if(error) throw new Error(error.message);
+    let thead = '<tr><th>Usuario</th><th>Rol</th></tr>';
+    let rows = (data||[]).map(u=>{
+      const usuario = (u.email||'').split('@')[0];
+      const badge = u.role==='admin' ? '<span class="role-badge admin">admin</span>' : '<span class="role-badge viewer">viewer</span>';
+      return `<tr><td>${usuario}</td><td>${badge}</td></tr>`;
+    }).join('');
+    el.innerHTML = thead + (rows || '<tr><td colspan="2">Sin usuarios.</td></tr>');
+  }catch(err){
+    el.innerHTML = `<tr><th>Usuario</th><th>Rol</th></tr><tr><td colspan="2">No se pudo cargar: ${err.message}</td></tr>`;
+  }
+}
 
 /* ============ STORAGE (compartido en Supabase, visible para todos los usuarios) ============ */
 async function loadStoredData(){
@@ -692,7 +738,7 @@ function populateFilters(){
       activeVariedad = btn.dataset.v;
       gf.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores();
+      renderInicio(); renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores();
     });
   });
 
@@ -704,6 +750,23 @@ function populateFilters(){
 }
 
 /* ============ KPIs ============ */
+function renderInicio(){
+  const rows = activeVariedad ? balanza.filter(r=>r.variedad===activeVariedad) : balanza;
+  const kgReal = rows.reduce((s,r)=>s+r.kg,0);
+  const kgPpto = ESTIMACION.reduce((s,r)=>s+kgPptoVariedad(r, activeVariedad),0);
+  const cump = kgPpto>0 ? kgReal/kgPpto : 0;
+  const fechas = balanza.map(r=>r.fecha).sort();
+  const ultima = fechas.length ? fechas[fechas.length-1] : '—';
+  document.getElementById('inicioResumen').innerHTML = `
+    <p style="margin:0 0 10px 0; font-size:13.5px; color:#555; line-height:1.6;">
+      Avance de campaña: <b style="color:${cump>=1?'var(--verde-ok)':'var(--rojo)'}">${pct(cump)}</b>
+      del presupuesto (${fmt(kgReal)} kg reales de ${fmt(kgPpto)} kg ppto). Última recepción registrada: <b>${ultima}</b>.
+    </p>
+    <p style="margin:0; font-size:13px; color:#8a8f83;">
+      Usa el menú <b>Reportes</b> de la izquierda para el detalle por día, por semana, por bins y por sector.
+    </p>`;
+}
+
 function renderKPIs(){
   const rows = activeVariedad ? balanza.filter(r=>r.variedad===activeVariedad) : balanza;
   const kgReal = rows.reduce((s,r)=>s+r.kg,0);
@@ -1050,6 +1113,7 @@ function drawComboBar(id, labels, planData, realData){
 /* ============ RENDER ALL ============ */
 function renderAll(){
   populateFilters();
+  renderInicio();
   renderKPIs();
   renderCosecha();
   renderPlan();
@@ -1078,6 +1142,7 @@ document.getElementById('sidebar').addEventListener('click', e=>{
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+btn.dataset.page).classList.add('active');
   document.getElementById('pageTitle').textContent = PAGE_TITLES[btn.dataset.page] || '';
+  if(btn.dataset.page === 'usuarios') loadUsersList();
   closeSidebarMobile();
 });
 
