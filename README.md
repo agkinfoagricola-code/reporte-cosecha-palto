@@ -29,8 +29,8 @@ El usuario ingresa solo su nombre de usuario (ej. `jguevara`) — el sistema arm
 7. **Project Settings → API** → copia el **Project URL** y el **anon public key**.
 8. Abre `index.html`, busca (`Ctrl+F`) estas dos líneas cerca del inicio del `<script>` y reemplázalas con tus valores reales:
    ```js
-   const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
-   const SUPABASE_ANON_KEY = 'TU-ANON-KEY';
+   const SUPABASE_URL = 'https://nzgrllrmflnpzumaksgr.supabase.co';
+   const SUPABASE_ANON_KEY = 'sb_publishable_YXAHBYS68J-UEoVW6zmpFg_mho_V3To';
    ```
    (La `anon key` es pública por diseño — la seguridad la dan las políticas RLS del paso 2, no esta llave.)
 
