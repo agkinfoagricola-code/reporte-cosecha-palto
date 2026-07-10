@@ -716,12 +716,22 @@ function isoWeekStart(dateStr){
 }
 
 /* ============ GLOBAL FILTER STATE ============ */
-let activeVariedad = '';
+// [] = Todas. Hass es exclusivo (al elegirlo, limpia lo demás).
+// Ettinger y Zutano se pueden marcar juntos (multi-selección entre ellos).
+let activeVariedades = [];
 
-function kgPptoVariedad(e, variedad){
-  if(variedad==='HASS') return e.kgHass;
-  if(variedad==='ETTINGER') return e.kgEtt;
-  if(variedad==='ZUTANO') return e.kgZut;
+function matchVariedad(v){
+  return activeVariedades.length === 0 || activeVariedades.includes(v);
+}
+
+function kgPptoVariedad(e, sel){
+  // sel puede ser un array (nueva multi-selección) o un string (compatibilidad)
+  const arr = Array.isArray(sel) ? sel : (sel ? [sel] : []);
+  if(arr.length === 0) return e.kgTotal;
+  if(arr.length === 1 && arr[0] === 'HASS') return e.kgHass;
+  if(arr.length === 1 && arr[0] === 'ETTINGER') return e.kgEtt;
+  if(arr.length === 1 && arr[0] === 'ZUTANO') return e.kgZut;
+  if(arr.includes('ETTINGER') && arr.includes('ZUTANO') && !arr.includes('HASS')) return e.kgEtt + e.kgZut;
   return e.kgTotal;
 }
 
@@ -732,12 +742,21 @@ function populateFilters(){
 
   const gf = document.getElementById('gfButtons');
   const opts = [{v:'', label:'Todas'}, ...variedades.map(v=>({v, label:v.charAt(0)+v.slice(1).toLowerCase()}))];
-  gf.innerHTML = opts.map(o=> `<button data-v="${o.v}" class="${activeVariedad===o.v?'active':''}">${o.label}</button>`).join('');
+  gf.innerHTML = opts.map(o=> `<button data-v="${o.v}" class="${isVariedadBtnActive(o.v)?'active':''}">${o.label}</button>`).join('');
   gf.querySelectorAll('button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      activeVariedad = btn.dataset.v;
-      gf.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
+      const v = btn.dataset.v;
+      if(v === ''){
+        activeVariedades = [];
+      } else if(v === 'HASS'){
+        activeVariedades = (activeVariedades.length===1 && activeVariedades[0]==='HASS') ? [] : ['HASS'];
+      } else {
+        // ETTINGER o ZUTANO: multi-selección entre ellos, exclusivos de HASS
+        activeVariedades = activeVariedades.filter(x=>x!=='HASS');
+        if(activeVariedades.includes(v)) activeVariedades = activeVariedades.filter(x=>x!==v);
+        else activeVariedades = [...activeVariedades, v];
+      }
+      gf.querySelectorAll('button').forEach(b=> b.classList.toggle('active', isVariedadBtnActive(b.dataset.v)));
       renderInicio(); renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores();
     });
   });
@@ -749,11 +768,16 @@ function populateFilters(){
   populateSectorFilters();
 }
 
+function isVariedadBtnActive(v){
+  if(v === '') return activeVariedades.length === 0;
+  return activeVariedades.includes(v);
+}
+
 /* ============ KPIs ============ */
 function renderInicio(){
-  const rows = activeVariedad ? balanza.filter(r=>r.variedad===activeVariedad) : balanza;
+  const rows = balanza.filter(r=>matchVariedad(r.variedad));
   const kgReal = rows.reduce((s,r)=>s+r.kg,0);
-  const kgPpto = ESTIMACION.reduce((s,r)=>s+kgPptoVariedad(r, activeVariedad),0);
+  const kgPpto = ESTIMACION.reduce((s,r)=>s+kgPptoVariedad(r, activeVariedades),0);
   const cump = kgPpto>0 ? kgReal/kgPpto : 0;
   const fechas = balanza.map(r=>r.fecha).sort();
   const ultima = fechas.length ? fechas[fechas.length-1] : '—';
@@ -768,9 +792,9 @@ function renderInicio(){
 }
 
 function renderKPIs(){
-  const rows = activeVariedad ? balanza.filter(r=>r.variedad===activeVariedad) : balanza;
+  const rows = balanza.filter(r=>matchVariedad(r.variedad));
   const kgReal = rows.reduce((s,r)=>s+r.kg,0);
-  const kgPpto = ESTIMACION.reduce((s,r)=>s+kgPptoVariedad(r, activeVariedad),0);
+  const kgPpto = ESTIMACION.reduce((s,r)=>s+kgPptoVariedad(r, activeVariedades),0);
   const bins = rows.reduce((s,r)=>s+(r.bines||0),0);
   const dif = kgReal - kgPpto;
   const promBin = bins>0 ? kgReal/bins : 0;
@@ -802,7 +826,7 @@ function renderKPIs(){
 /* ============ PAGE 1: COSECHA ============ */
 function renderCosecha(){
   const fLote = document.getElementById('f1-lote').value;
-  const rows = balanza.filter(r => (!activeVariedad || r.variedad===activeVariedad) && (!fLote || String(r.lote)===String(fLote)));
+  const rows = balanza.filter(r => matchVariedad(r.variedad) && (!fLote || String(r.lote)===String(fLote)));
 
   const byDate = sumBy(rows, r=>r.fecha, r=>r.kg);
   const dates = [...byDate.keys()].sort();
@@ -833,8 +857,8 @@ function renderCosecha(){
 
 /* ============ PAGE 2: PLAN VS REAL ============ */
 function renderPlan(){
-  const rows = balanza.filter(r => !activeVariedad || r.variedad===activeVariedad);
-  const plan = PLAN_SEMANAL.filter(p => !activeVariedad || p.variedad===activeVariedad);
+  const rows = balanza.filter(r => matchVariedad(r.variedad));
+  const plan = PLAN_SEMANAL.filter(p => matchVariedad(p.variedad));
 
   const realByWeek = new Map();
   rows.forEach(r=>{
@@ -875,7 +899,7 @@ function renderPlan(){
 
 /* ============ PAGE 3: BINS ============ */
 function renderBins(){
-  const rows = balanza.filter(r => !activeVariedad || r.variedad===activeVariedad);
+  const rows = balanza.filter(r => matchVariedad(r.variedad));
 
   const byLote = sumBy(rows, r=>'Lote '+r.lote, r=>r.kg);
   const lotesSorted = [...byLote.keys()].sort((a,b)=> parseInt(a.replace('Lote ',''))-parseInt(b.replace('Lote ','')));
@@ -921,10 +945,12 @@ function estadoPill(ratio){
   return `<span class="pill ${cls}">${pct(ratio)}</span>`;
 }
 
-function kgxhaPptoFor(e, variedad){
-  if(variedad==='ETTINGER') return e.has>0 ? e.kgEtt/e.has : 0;
-  if(variedad==='ZUTANO') return e.has>0 ? e.kgZut/e.has : 0;
-  return e.kgxha; // HASS o Todas: usa la tasa Kg/Ha ya calculada en Res_Lote_Red
+function kgxhaPptoFor(e, sel){
+  const arr = Array.isArray(sel) ? sel : (sel ? [sel] : []);
+  if(arr.length === 1 && arr[0] === 'ETTINGER') return e.has>0 ? e.kgEtt/e.has : 0;
+  if(arr.length === 1 && arr[0] === 'ZUTANO') return e.has>0 ? e.kgZut/e.has : 0;
+  if(arr.includes('ETTINGER') && arr.includes('ZUTANO') && !arr.includes('HASS')) return e.has>0 ? (e.kgEtt+e.kgZut)/e.has : 0;
+  return e.kgxha; // [], ['HASS'], o combinaciones que incluyen HASS: usa la tasa ya calculada en Res_Lote_Red
 }
 
 // Deduplica el avance de hectáreas por SECTOR (no por lote-red), para no
@@ -964,9 +990,9 @@ function renderAvance(){
   const avHaMap = computeAvHaPorLoteRed();
   let totHas=0, totKgP=0, totAvHa=0, totKgR=0;
   const rowsHtml = ESTIMACION.map(e=>{
-    const balRows = balanza.filter(b=> b.lote==e.lote && b.red==e.red && (!activeVariedad || b.variedad===activeVariedad));
+    const balRows = balanza.filter(b=> b.lote==e.lote && b.red==e.red && matchVariedad(b.variedad));
     const kgReal = balRows.reduce((s,r)=>s+r.kg,0);
-    const kgxhaPpto = kgxhaPptoFor(e, activeVariedad);
+    const kgxhaPpto = kgxhaPptoFor(e, activeVariedades);
     const kgTotalPpto = kgxhaPpto * e.has;
 
     const avHaRaw = avHaMap.get(e.lote+'-'+e.red) || 0;
@@ -1013,7 +1039,7 @@ function renderSectores(){
   const fRed = document.getElementById('f5-red').value;
 
   const sectorDetails = computeSectorDetails().filter(s => String(s.lote)===String(fLote) && (!fRed || s.red===fRed));
-  const variedades = activeVariedad ? [activeVariedad] : ['HASS','ETTINGER','ZUTANO'];
+  const variedades = activeVariedades.length ? activeVariedades : ['HASS','ETTINGER','ZUTANO'];
 
   // suma de superficie por lote-red, para prorratear el Kg Ppto de cada sector (solo referencial a nivel sector)
   const supSumByLoteRed = new Map();
