@@ -1037,40 +1037,56 @@ function computeSectorDetails(){
   });
   return [...bySector.values()].map(o=>{
     const superficie = o.superficieN>0 ? o.superficieSum/o.superficieN : 0;
-    const areaSector = o.barrido ? superficie : Math.min(o.selectivaHa, superficie);
-    return { lote:o.lote, red:o.red, sector:o.sector, superficie, areaSector, barrido:o.barrido };
+    // Un sector "barrido" (BARRER/BARRER DS) cuenta su superficie completa como avance.
+    // Un sector solo trabajado en pases selectivos cuenta la suma de esos pases, topada a la superficie.
+    // areaSectorBarrido + areaSectorSelectivo = areaSector (igual que antes, solo desglosado).
+    const areaSectorBarrido = o.barrido ? superficie : 0;
+    const areaSectorSelectivo = o.barrido ? 0 : Math.min(o.selectivaHa, superficie);
+    const areaSector = areaSectorBarrido + areaSectorSelectivo;
+    return { lote:o.lote, red:o.red, sector:o.sector, superficie, areaSector, areaSectorBarrido, areaSectorSelectivo, barrido:o.barrido };
   });
 }
 
 function computeAvHaPorLoteRed(){
   const avHaByLoteRed = new Map();
+  const barridoByLoteRed = new Map();
+  const selectivoByLoteRed = new Map();
   computeSectorDetails().forEach(o=>{
     const key = o.lote+'-'+o.red;
     avHaByLoteRed.set(key, (avHaByLoteRed.get(key)||0) + o.areaSector);
+    barridoByLoteRed.set(key, (barridoByLoteRed.get(key)||0) + o.areaSectorBarrido);
+    selectivoByLoteRed.set(key, (selectivoByLoteRed.get(key)||0) + o.areaSectorSelectivo);
   });
-  return avHaByLoteRed;
+  return { avHaByLoteRed, barridoByLoteRed, selectivoByLoteRed };
 }
 
 function renderAvance(){
-  let thead = `<tr><th>Lote</th><th>Red</th><th class="num">Has Ppto</th><th class="num">Av. Ha</th>
+  let thead = `<tr><th>Lote</th><th>Red</th><th class="num">Has Ppto</th>
+    <th class="num">Ha Selectivo</th><th class="num">Ha Barrido/DS</th><th class="num">Av. Ha</th>
     <th class="num">Kg/Ha Ppto</th><th class="num">Kg Total Ppto</th><th class="num">Kg Total Real</th>
     <th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Estado vs Ppto</th></tr>`;
-  const avHaMap = computeAvHaPorLoteRed();
-  let totHas=0, totKgP=0, totAvHa=0, totKgR=0;
+  const { avHaByLoteRed: avHaMap, barridoByLoteRed: barridoMap, selectivoByLoteRed: selectivoMap } = computeAvHaPorLoteRed();
+  let totHas=0, totKgP=0, totAvHa=0, totKgR=0, totBarrido=0, totSelectivo=0;
   const rowsHtml = ESTIMACION.map(e=>{
     const balRows = balanza.filter(b=> b.lote==e.lote && b.red==e.red && matchVariedad(b.variedad));
     const kgReal = balRows.reduce((s,r)=>s+r.kg,0);
     const kgxhaPpto = kgxhaPptoFor(e, activeVariedades);
     const kgTotalPpto = kgxhaPpto * e.has;
 
-    const avHaRaw = avHaMap.get(e.lote+'-'+e.red) || 0;
+    const key = e.lote+'-'+e.red;
+    const avHaRaw = avHaMap.get(key) || 0;
     const avHa = Math.min(avHaRaw, e.has);
+    // Ha Selectivo y Ha Barrido se muestran a escala real (sin topar), la columna Av. Ha sí queda topada a Has Ppto.
+    const haSelectivo = selectivoMap.get(key) || 0;
+    const haBarrido = barridoMap.get(key) || 0;
     const kgxhaReal = avHa>0 ? kgReal/avHa : 0;
     const ratio = kgxhaPpto>0 ? kgxhaReal/kgxhaPpto : 0;
 
     totHas+=e.has; totKgP+=kgTotalPpto; totAvHa+=avHa; totKgR+=kgReal;
+    totBarrido+=haBarrido; totSelectivo+=haSelectivo;
 
-    return `<tr><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td><td class="num">${fmt1(avHa)}</td>
+    return `<tr><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td>
+      <td class="num">${fmt1(haSelectivo)}</td><td class="num">${fmt1(haBarrido)}</td><td class="num">${fmt1(avHa)}</td>
       <td class="num">${fmt(kgxhaPpto)}</td><td class="num">${fmt(kgTotalPpto)}</td><td class="num">${fmt(kgReal)}</td>
       <td class="num">${fmt(kgxhaReal)}</td><td class="num">${fmt(kgxhaReal - kgxhaPpto)}</td><td>${estadoPill(ratio)}</td></tr>`;
   }).join('');
@@ -1078,6 +1094,7 @@ function renderAvance(){
   const totKgxHaReal = totAvHa>0 ? totKgR/totAvHa : 0;
   const totRatio = totKgxHaPpto>0 ? totKgxHaReal/totKgxHaPpto : 0;
   const totRow = `<tr><td colspan="2"><b>Total / Prom.</b></td><td class="num"><b>${fmt1(totHas)}</b></td>
+    <td class="num"><b>${fmt1(totSelectivo)}</b></td><td class="num"><b>${fmt1(totBarrido)}</b></td>
     <td class="num"><b>${fmt1(totAvHa)}</b></td><td class="num"><b>${fmt(totKgxHaPpto)}</b></td>
     <td class="num"><b>${fmt(totKgP)}</b></td><td class="num"><b>${fmt(totKgR)}</b></td>
     <td class="num"><b>${fmt(totKgxHaReal)}</b></td><td class="num"><b>${fmt(totKgxHaReal-totKgxHaPpto)}</b></td>
