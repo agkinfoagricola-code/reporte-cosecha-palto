@@ -479,8 +479,11 @@
   <section class="page" id="page-cosechadores">
     <p style="font-size:12px; color:#8a8f83; margin:-6px 0 14px 0; max-width:900px;">
       Ratio diario de productividad: kg cosechados (balanza) ÷ N° de cosechadores únicos ese día
-      (tareo, solo labores de jornales de cosecha y tacheros). Los días sin tareo cargado no
-      muestran ratio.
+      (tareo, solo labores de jornales de cosecha y tacheros). Respeta el filtro de <b>Variedad</b>
+      de arriba: Hass usa el tareo con códigos 3052/3152, Ettinger y Zutano usan el tareo
+      "polinizante" (3180/3095) — como el tareo no distingue Ettinger de Zutano por separado,
+      filtrar por una u otra da el mismo conteo de cosechadores (el kg sí se filtra correctamente
+      por variedad). Los días sin tareo cargado no muestran ratio.
     </p>
     <section class="kpi-strip" id="kpiCosechadores"></section>
     <div class="panel">
@@ -584,10 +587,15 @@ const PLAN_SEMANAL = [{"semana": "2026-06-01", "variedad": "HASS", "kg": 0}, {"s
 let balanza = DEFAULT_BALANZA;
 let hectareas = DEFAULT_HECTAREAS;
 let tareo = DEFAULT_TAREO;
-// Códigos de labor considerados "cosechador" (jornales de cosecha + tacheros).
-// 3052/3152 = temporada Hass en adelante; 3180/3095 = equivalentes usados en
-// temporada Ettinger/Zutano (mayo-jun). Ver conversación con Javier del 13-jul-2026.
-const TAREO_COSECHADOR_CODES = new Set([3052, 3152, 3180, 3095]);
+// Códigos de labor considerados "cosechador" (jornales de cosecha + tacheros), separados
+// por variedad para poder cruzarlos con el filtro global de Variedad:
+// - TAREO_HASS_CODES: usados desde la temporada Hass (jun-2026 en adelante).
+// - TAREO_POLINIZANTE_CODES: usados en temporada Ettinger/Zutano (mayo-jun-2026). El tareo
+//   NO distingue Ettinger de Zutano por separado (comparten el mismo código "POLI"), así que
+//   filtrar por Ettinger o por Zutano por separado da el mismo conteo de cosechadores en ambos.
+const TAREO_HASS_CODES = new Set([3052, 3152]);
+const TAREO_POLINIZANTE_CODES = new Set([3180, 3095]);
+const TAREO_COSECHADOR_CODES = new Set([...TAREO_HASS_CODES, ...TAREO_POLINIZANTE_CODES]);
 let charts = {};
 let currentUser = null;
 let currentRole = 'viewer';
@@ -816,7 +824,7 @@ function populateFilters(){
         else activeVariedades = [...activeVariedades, v];
       }
       gf.querySelectorAll('button').forEach(b=> b.classList.toggle('active', isVariedadBtnActive(b.dataset.v)));
-      renderInicio(); renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores();
+      renderInicio(); renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores(); renderCosechadores();
     });
   });
 
@@ -1192,11 +1200,20 @@ function mesLabelFor(dateStr){
   return monthNames[d.getMonth()];
 }
 
+function codlabAllowedByVariedadFilter(codlab){
+  if(activeVariedades.length === 0) return true;
+  if(activeVariedades.includes('HASS') && TAREO_HASS_CODES.has(codlab)) return true;
+  if((activeVariedades.includes('ETTINGER') || activeVariedades.includes('ZUTANO')) && TAREO_POLINIZANTE_CODES.has(codlab)) return true;
+  return false;
+}
+
 function cosechadoresPorDia(){
-  // trabajadores únicos por fecha, solo labores de cosecha (TAREO_COSECHADOR_CODES)
+  // trabajadores únicos por fecha, solo labores de cosecha (TAREO_COSECHADOR_CODES),
+  // respetando el filtro global de Variedad (arriba en el header).
   const porFecha = {};
   for(const r of tareo){
     if(!TAREO_COSECHADOR_CODES.has(r.codlab)) continue;
+    if(!codlabAllowedByVariedadFilter(r.codlab)) continue;
     if(!porFecha[r.fecha]) porFecha[r.fecha] = new Set();
     porFecha[r.fecha].add(r.codigo);
   }
@@ -1208,6 +1225,7 @@ function cosechadoresPorDia(){
 function kgPorDia(){
   const out = {};
   for(const r of balanza){
+    if(!matchVariedad(r.variedad)) continue;
     out[r.fecha] = (out[r.fecha]||0) + r.kg;
   }
   return out;
