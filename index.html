@@ -1046,13 +1046,21 @@ function computeSectorDetails(){
 // - "Selectivo": ha marcadas SELECTIVA / SELECTIVO 300 A MAS.
 // - "Barrido": ha marcadas BARRER / BARRER DS. Este es el pase que sí extrae los kilos,
 //   por eso "Av. Ha" (usado para Kg/Ha Real) solo considera esta columna.
-//   OJO: un mismo sector puede aparecer trabajado (selectivo o barrido) en varias fechas
-//   (repasos / reingresos) y además la data trae algunas filas duplicadas exactas. Sumar el "ha"
-//   de cada fila sin control infla el total muy por encima de la superficie real del sector.
-//   Por eso, tanto Selectivo como Barrido se capan POR SECTOR a su propia superficie antes de
-//   sumarlos al total del Lote-Red.
+//   OJO 1: un mismo sector puede aparecer trabajado (selectivo o barrido) en varias fechas
+//   (repasos / reingresos) y además la data trae algunas filas duplicadas exactas. Por eso se
+//   capa por sector (código exacto, con su sufijo de renovación) a su propia superficie antes de
+//   sumar.
+//   OJO 2: el sufijo "-R##" en el nombre del sector es un CÓDIGO DE RENOVACIÓN, no una subdivisión
+//   física nueva — si el mismo sector base aparece bajo dos códigos de renovación distintos (ej.
+//   "S46-R20" y "S46-R22"), es la MISMA área física repasada bajo otro código, así que entre esas
+//   variantes se toma el MÁXIMO (no se suman) para no duplicar la hectárea.
+function baseSectorCode(sector){
+  const m = /^(.*?)-R\d+$/.exec(sector);
+  return m ? m[1] : sector;
+}
+
 function computeHaAvancePorLoteRed(){
-  const sectorSelectivo = new Map(); // key: lote|red|sector -> {haSum, supSum, supN, lote, red}
+  const sectorSelectivo = new Map(); // key: lote|red|sector(exacto) -> {haSum, supSum, supN, lote, red, sector}
   const sectorBarrido = new Map();
 
   hectareas.forEach(h=>{
@@ -1060,13 +1068,13 @@ function computeHaAvancePorLoteRed(){
     const ha = h.ha || 0;
     const keySec = h.lote+'|'+h.red+'|'+h.sector;
     if(h.tipo==='SELECTIVA' || h.tipo==='SELECTIVO 300 A MAS [CAL 14]'){
-      if(!sectorSelectivo.has(keySec)) sectorSelectivo.set(keySec, {haSum:0, supSum:0, supN:0, lote:h.lote, red:h.red});
+      if(!sectorSelectivo.has(keySec)) sectorSelectivo.set(keySec, {haSum:0, supSum:0, supN:0, lote:h.lote, red:h.red, sector:h.sector});
       const o = sectorSelectivo.get(keySec);
       o.haSum += ha;
       o.supSum += (h.superficie ?? h.ha) || 0;
       o.supN += 1;
     } else if(h.tipo==='BARRER' || h.tipo==='BARRER DS'){
-      if(!sectorBarrido.has(keySec)) sectorBarrido.set(keySec, {haSum:0, supSum:0, supN:0, lote:h.lote, red:h.red});
+      if(!sectorBarrido.has(keySec)) sectorBarrido.set(keySec, {haSum:0, supSum:0, supN:0, lote:h.lote, red:h.red, sector:h.sector});
       const o = sectorBarrido.get(keySec);
       o.haSum += ha;
       o.supSum += (h.superficie ?? h.ha) || 0;
@@ -1075,12 +1083,22 @@ function computeHaAvancePorLoteRed(){
   });
 
   const aggregateCapped = (sectorMap) => {
-    const out = new Map();
+    // Paso 1: capar cada sector EXACTO (con su código de renovación) a su propia superficie.
+    const cappedByBase = new Map(); // key: lote|red|baseSector -> [valores capados de cada variante]
     sectorMap.forEach(o=>{
       const superficie = o.supN>0 ? o.supSum/o.supN : 0;
-      const cappedHa = Math.min(o.haSum, superficie); // un sector no puede trabajarse más de su propia área
-      const keyLR = o.lote+'-'+o.red;
-      out.set(keyLR, (out.get(keyLR)||0) + cappedHa);
+      const cappedHa = Math.min(o.haSum, superficie);
+      const baseKey = o.lote+'|'+o.red+'|'+baseSectorCode(o.sector);
+      if(!cappedByBase.has(baseKey)) cappedByBase.set(baseKey, []);
+      cappedByBase.get(baseKey).push(cappedHa);
+    });
+    // Paso 2: entre variantes del mismo sector base (mismo sector, distinto código de renovación),
+    // tomar el MÁXIMO — no sumar, para no duplicar la misma área física.
+    const out = new Map();
+    cappedByBase.forEach((valores, baseKey)=>{
+      const [lote, red] = baseKey.split('|');
+      const keyLR = lote+'-'+red;
+      out.set(keyLR, (out.get(keyLR)||0) + Math.max(...valores));
     });
     return out;
   };
