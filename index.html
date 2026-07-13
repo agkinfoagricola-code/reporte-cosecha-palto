@@ -1037,27 +1037,29 @@ function computeSectorDetails(){
   });
   return [...bySector.values()].map(o=>{
     const superficie = o.superficieN>0 ? o.superficieSum/o.superficieN : 0;
-    // Un sector "barrido" (BARRER/BARRER DS) cuenta su superficie completa como avance.
-    // Un sector solo trabajado en pases selectivos cuenta la suma de esos pases, topada a la superficie.
-    // areaSectorBarrido + areaSectorSelectivo = areaSector (igual que antes, solo desglosado).
-    const areaSectorBarrido = o.barrido ? superficie : 0;
-    const areaSectorSelectivo = o.barrido ? 0 : Math.min(o.selectivaHa, superficie);
-    const areaSector = areaSectorBarrido + areaSectorSelectivo;
-    return { lote:o.lote, red:o.red, sector:o.sector, superficie, areaSector, areaSectorBarrido, areaSectorSelectivo, barrido:o.barrido };
+    const areaSector = o.barrido ? superficie : Math.min(o.selectivaHa, superficie);
+    return { lote:o.lote, red:o.red, sector:o.sector, superficie, areaSector, barrido:o.barrido };
   });
 }
 
-function computeAvHaPorLoteRed(){
-  const avHaByLoteRed = new Map();
-  const barridoByLoteRed = new Map();
-  const selectivoByLoteRed = new Map();
-  computeSectorDetails().forEach(o=>{
-    const key = o.lote+'-'+o.red;
-    avHaByLoteRed.set(key, (avHaByLoteRed.get(key)||0) + o.areaSector);
-    barridoByLoteRed.set(key, (barridoByLoteRed.get(key)||0) + o.areaSectorBarrido);
-    selectivoByLoteRed.set(key, (selectivoByLoteRed.get(key)||0) + o.areaSectorSelectivo);
+// Suma directa de hectáreas por Lote-Red según el tipo de pase de cosecha:
+// - "Selectivo": TODAS las ha marcadas SELECTIVA / SELECTIVO 300 A MAS, sin importar si ese
+//   sector luego fue barrido. Cubre toda el área pero extrae pocos kilos (no cuenta como avance real).
+// - "Barrido": TODAS las ha marcadas BARRER / BARRER DS. Este es el pase que sí extrae los kilos,
+//   por eso "Av. Ha" (usado para Kg/Ha Real) solo considera esta columna.
+function computeHaAvancePorLoteRed(){
+  const selectivo = new Map();
+  const barrido = new Map();
+  hectareas.forEach(h=>{
+    const key = h.lote+'-'+h.red;
+    const ha = h.ha || 0;
+    if(h.tipo==='SELECTIVA' || h.tipo==='SELECTIVO 300 A MAS [CAL 14]'){
+      selectivo.set(key, (selectivo.get(key)||0) + ha);
+    } else if(h.tipo==='BARRER' || h.tipo==='BARRER DS'){
+      barrido.set(key, (barrido.get(key)||0) + ha);
+    }
   });
-  return { avHaByLoteRed, barridoByLoteRed, selectivoByLoteRed };
+  return { selectivo, barrido };
 }
 
 function renderAvance(){
@@ -1065,7 +1067,7 @@ function renderAvance(){
     <th class="num">Ha Selectivo</th><th class="num">Ha Barrido/DS</th><th class="num">Av. Ha</th>
     <th class="num">Kg/Ha Ppto</th><th class="num">Kg Total Ppto</th><th class="num">Kg Total Real</th>
     <th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Estado vs Ppto</th></tr>`;
-  const { avHaByLoteRed: avHaMap, barridoByLoteRed: barridoMap, selectivoByLoteRed: selectivoMap } = computeAvHaPorLoteRed();
+  const { selectivo: selectivoMap, barrido: barridoMap } = computeHaAvancePorLoteRed();
   let totHas=0, totKgP=0, totAvHa=0, totKgR=0, totBarrido=0, totSelectivo=0;
   const rowsHtml = ESTIMACION.map(e=>{
     const balRows = balanza.filter(b=> b.lote==e.lote && b.red==e.red && matchVariedad(b.variedad));
@@ -1074,11 +1076,10 @@ function renderAvance(){
     const kgTotalPpto = kgxhaPpto * e.has;
 
     const key = e.lote+'-'+e.red;
-    const avHaRaw = avHaMap.get(key) || 0;
-    const avHa = Math.min(avHaRaw, e.has);
-    // Ha Selectivo y Ha Barrido se muestran a escala real (sin topar), la columna Av. Ha sí queda topada a Has Ppto.
     const haSelectivo = selectivoMap.get(key) || 0;
     const haBarrido = barridoMap.get(key) || 0;
+    // Av. Ha (usada para Kg/Ha Real) solo cuenta lo barrido, topado a las Has Ppto del lote-red.
+    const avHa = Math.min(haBarrido, e.has);
     const kgxhaReal = avHa>0 ? kgReal/avHa : 0;
     const ratio = kgxhaPpto>0 ? kgxhaReal/kgxhaPpto : 0;
 
