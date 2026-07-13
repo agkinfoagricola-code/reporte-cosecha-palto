@@ -1055,6 +1055,7 @@ function computeHaAvancePorLoteRed(){
   const sectorBarrido = new Map(); // key: lote|red|sector -> {haSum, supSum, supN, lote, red}
 
   hectareas.forEach(h=>{
+    if(!matchVariedad(h.variedad)) return;
     const keyLR = h.lote+'-'+h.red;
     const ha = h.ha || 0;
     if(h.tipo==='SELECTIVA' || h.tipo==='SELECTIVO 300 A MAS [CAL 14]'){
