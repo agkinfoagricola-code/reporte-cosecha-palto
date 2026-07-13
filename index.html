@@ -1104,16 +1104,18 @@ function renderAvance(){
     const key = e.lote+'-'+e.red;
     const haSelectivo = selectivoMap.get(key) || 0;
     const haBarrido = barridoMap.get(key) || 0;
-    // Av. Ha (usada para Kg/Ha Real) solo cuenta lo barrido, topado a las Has Ppto del lote-red.
-    const avHa = Math.min(haBarrido, e.has);
+    // Av. Ha (usada para Kg/Ha Real) es directamente lo barrido — ya viene bien acotado por sector.
+    const avHa = haBarrido;
     const kgxhaReal = avHa>0 ? kgReal/avHa : 0;
     const ratio = kgxhaPpto>0 ? kgxhaReal/kgxhaPpto : 0;
+    // Lote-Red "cerrado": ya se barrió el 100% (o más) de las Has Ppto.
+    const cerrado = e.has>0 && avHa >= e.has - 0.05;
 
     totHas+=e.has; totKgP+=kgTotalPpto; totAvHa+=avHa; totKgR+=kgReal;
     totBarrido+=haBarrido; totSelectivo+=haSelectivo;
 
-    return `<tr><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td>
-      <td class="num">${fmt1(haSelectivo)}</td><td class="num">${fmt1(haBarrido)}</td><td class="num">${fmt1(avHa)}</td>
+    return `<tr${cerrado ? ' style="background:#E3F1E6;"' : ''}><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td>
+      <td class="num">${fmt1(haSelectivo)}</td><td class="num">${fmt1(haBarrido)}</td><td class="num">${fmt1(avHa)}${cerrado ? ' ✅' : ''}</td>
       <td class="num">${fmt(kgxhaPpto)}</td><td class="num">${fmt(kgTotalPpto)}</td><td class="num">${fmt(kgReal)}</td>
       <td class="num">${fmt(kgxhaReal)}</td><td class="num">${fmt(kgxhaReal - kgxhaPpto)}</td><td>${estadoPill(ratio)}</td></tr>`;
   }).join('');
