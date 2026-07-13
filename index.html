@@ -1047,18 +1047,36 @@ function computeSectorDetails(){
 //   sector luego fue barrido. Cubre toda el área pero extrae pocos kilos (no cuenta como avance real).
 // - "Barrido": TODAS las ha marcadas BARRER / BARRER DS. Este es el pase que sí extrae los kilos,
 //   por eso "Av. Ha" (usado para Kg/Ha Real) solo considera esta columna.
+//   OJO: un mismo sector puede aparecer barrido en varias fechas (repasos / reingresos), así que
+//   sumar el "ha" de cada fila sin control infla el total muy por encima de la superficie real.
+//   Por eso el barrido se capa POR SECTOR a su propia superficie antes de sumarlo al Lote-Red.
 function computeHaAvancePorLoteRed(){
   const selectivo = new Map();
-  const barrido = new Map();
+  const sectorBarrido = new Map(); // key: lote|red|sector -> {haSum, supSum, supN, lote, red}
+
   hectareas.forEach(h=>{
-    const key = h.lote+'-'+h.red;
+    const keyLR = h.lote+'-'+h.red;
     const ha = h.ha || 0;
     if(h.tipo==='SELECTIVA' || h.tipo==='SELECTIVO 300 A MAS [CAL 14]'){
-      selectivo.set(key, (selectivo.get(key)||0) + ha);
+      selectivo.set(keyLR, (selectivo.get(keyLR)||0) + ha);
     } else if(h.tipo==='BARRER' || h.tipo==='BARRER DS'){
-      barrido.set(key, (barrido.get(key)||0) + ha);
+      const keySec = h.lote+'|'+h.red+'|'+h.sector;
+      if(!sectorBarrido.has(keySec)) sectorBarrido.set(keySec, {haSum:0, supSum:0, supN:0, lote:h.lote, red:h.red});
+      const o = sectorBarrido.get(keySec);
+      o.haSum += ha;
+      o.supSum += (h.superficie ?? h.ha) || 0;
+      o.supN += 1;
     }
   });
+
+  const barrido = new Map();
+  sectorBarrido.forEach(o=>{
+    const superficie = o.supN>0 ? o.supSum/o.supN : 0;
+    const cappedHa = Math.min(o.haSum, superficie); // un sector no puede barrerse más de su propia área
+    const keyLR = o.lote+'-'+o.red;
+    barrido.set(keyLR, (barrido.get(keyLR)||0) + cappedHa);
+  });
+
   return { selectivo, barrido };
 }
 
