@@ -451,7 +451,10 @@
   <!-- PAGE 4: AVANCE -->
   <section class="page" id="page-avance">
     <div class="panel">
-      <h3>Kg/ha real vs ppto por Lote-Red</h3>
+      <h3 style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <span>Kg/ha real vs ppto por Lote-Red</span>
+        <button class="btn btn-ghost" id="exportAvanceBtn" style="font-size:12px; padding:7px 14px;">⬇️&nbsp; Descargar Excel</button>
+      </h3>
       <div class="tablewrap"><table id="tableAvance"></table></div>
     </div>
   </section>
@@ -1106,6 +1109,8 @@ function computeHaAvancePorLoteRed(){
   return { selectivo: aggregateCapped(sectorSelectivo), barrido: aggregateCapped(sectorBarrido) };
 }
 
+let lastAvanceData = null; // {rows:[...], totals:{...}} — usado también para exportar a Excel
+
 function renderAvance(){
   let thead = `<tr><th>Lote</th><th>Red</th><th class="num">Has Ppto</th>
     <th class="num">Ha Selectivo</th><th class="num">Ha Barrido/DS</th><th class="num">Av. Ha</th>
@@ -1113,6 +1118,7 @@ function renderAvance(){
     <th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Estado vs Ppto</th></tr>`;
   const { selectivo: selectivoMap, barrido: barridoMap } = computeHaAvancePorLoteRed();
   let totHas=0, totKgP=0, totAvHa=0, totKgR=0, totBarrido=0, totSelectivo=0;
+  const dataRows = [];
   const rowsHtml = ESTIMACION.map(e=>{
     const balRows = balanza.filter(b=> b.lote==e.lote && b.red==e.red && matchVariedad(b.variedad));
     const kgReal = balRows.reduce((s,r)=>s+r.kg,0);
@@ -1132,6 +1138,12 @@ function renderAvance(){
     totHas+=e.has; totKgP+=kgTotalPpto; totAvHa+=avHa; totKgR+=kgReal;
     totBarrido+=haBarrido; totSelectivo+=haSelectivo;
 
+    dataRows.push({
+      lote: e.lote, red: e.red, hasPpto: e.has, haSelectivo, haBarrido, avHa,
+      kgxhaPpto, kgTotalPpto, kgReal, kgxhaReal, varKgHa: kgxhaReal - kgxhaPpto,
+      estadoPct: ratio, cerrado
+    });
+
     return `<tr${cerrado ? ' style="background:#E3F1E6;"' : ''}><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td>
       <td class="num">${fmt1(haSelectivo)}</td><td class="num">${fmt1(haBarrido)}</td><td class="num">${fmt1(avHa)}${cerrado ? ' ✅' : ''}</td>
       <td class="num">${fmt(kgxhaPpto)}</td><td class="num">${fmt(kgTotalPpto)}</td><td class="num">${fmt(kgReal)}</td>
@@ -1147,7 +1159,57 @@ function renderAvance(){
     <td class="num"><b>${fmt(totKgxHaReal)}</b></td><td class="num"><b>${fmt(totKgxHaReal-totKgxHaPpto)}</b></td>
     <td><b>${estadoPill(totRatio)}</b></td></tr>`;
   document.getElementById('tableAvance').innerHTML = thead + rowsHtml + totRow;
+
+  lastAvanceData = {
+    rows: dataRows,
+    totals: {
+      hasPpto: totHas, haSelectivo: totSelectivo, haBarrido: totBarrido, avHa: totAvHa,
+      kgxhaPpto: totKgxHaPpto, kgTotalPpto: totKgP, kgReal: totKgR,
+      kgxhaReal: totKgxHaReal, varKgHa: totKgxHaReal - totKgxHaPpto, estadoPct: totRatio
+    }
+  };
 }
+
+// Exporta la tabla "Kg/ha real vs ppto por Lote-Red" a un archivo .xlsx, respetando
+// el filtro global de Variedad activo en el momento de la descarga.
+function exportAvanceToExcel(){
+  if(!lastAvanceData || !lastAvanceData.rows.length){
+    alert('No hay datos para exportar todavía.');
+    return;
+  }
+  const headers = ['Lote','Red','Has Ppto','Ha Selectivo','Ha Barrido/DS','Av. Ha',
+    'Kg/Ha Ppto','Kg Total Ppto','Kg Total Real','Kg/Ha Real','Var. Kg/Ha','% Cumpl. vs Ppto','Cerrado'];
+  const aoa = [headers];
+  lastAvanceData.rows.forEach(r=>{
+    aoa.push([
+      r.lote, r.red,
+      round1(r.hasPpto), round1(r.haSelectivo), round1(r.haBarrido), round1(r.avHa),
+      Math.round(r.kgxhaPpto), Math.round(r.kgTotalPpto), Math.round(r.kgReal),
+      Math.round(r.kgxhaReal), Math.round(r.varKgHa), round1(r.estadoPct*100),
+      r.cerrado ? 'Sí' : 'No'
+    ]);
+  });
+  const t = lastAvanceData.totals;
+  aoa.push([
+    'Total / Prom.', '',
+    round1(t.hasPpto), round1(t.haSelectivo), round1(t.haBarrido), round1(t.avHa),
+    Math.round(t.kgxhaPpto), Math.round(t.kgTotalPpto), Math.round(t.kgReal),
+    Math.round(t.kgxhaReal), Math.round(t.varKgHa), round1(t.estadoPct*100), ''
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = headers.map((h,i)=> i===0 ? {wch:8} : {wch: Math.max(h.length+2, 11)});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Kg Real vs Ppto');
+
+  const varSuffix = activeVariedades.length ? '_' + activeVariedades.join('-') : '_Todas';
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Kg_Real_vs_Ppto${varSuffix}_${stamp}.xlsx`);
+}
+
+function round1(n){ return Math.round((n||0) * 10) / 10; }
+
+document.getElementById('exportAvanceBtn').addEventListener('click', exportAvanceToExcel);
 
 /* ============ PAGE 5: DETALLE SECTORES ============ */
 function populateSectorFilters(){
