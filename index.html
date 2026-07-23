@@ -1049,6 +1049,12 @@ function estadoPill(ratio){
   return `<span class="pill ${cls}">${pct(ratio)}</span>`;
 }
 
+function estadoPillKg(ratio){
+  // ratio = Kg Total Real ÷ Kg Total Ppto (% de cumplimiento en kilos)
+  const cls = ratio >= 1 ? 'ok' : 'warn';
+  return `<span class="pill ${cls}">${pct(ratio)}</span>`;
+}
+
 function kgxhaPptoFor(e, sel){
   const arr = Array.isArray(sel) ? sel : (sel ? [sel] : []);
   if(arr.length === 1 && arr[0] === 'ETTINGER') return e.has>0 ? e.kgEtt/e.has : 0;
@@ -1148,7 +1154,7 @@ function renderAvance(){
   let thead = `<tr><th>Lote</th><th>Red</th><th class="num">Has Ppto</th>
     <th class="num">Ha Selectivo</th><th class="num">Ha Barrido/DS</th><th class="num">Av. Ha</th>
     <th class="num">Kg/Ha Ppto</th><th class="num">Kg Total Ppto</th><th class="num">Kg Total Real</th>
-    <th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Estado vs Ppto</th></tr>`;
+    <th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Estado vs Ppto</th><th>% Cumpl. Kg Total</th></tr>`;
   const { selectivo: selectivoMap, barrido: barridoMap } = computeHaAvancePorLoteRed();
   let totHas=0, totKgP=0, totAvHa=0, totKgR=0, totBarrido=0, totSelectivo=0;
   const dataRows = [];
@@ -1165,6 +1171,7 @@ function renderAvance(){
     const avHa = haBarrido;
     const kgxhaReal = avHa>0 ? kgReal/avHa : 0;
     const ratio = kgxhaPpto>0 ? kgxhaReal/kgxhaPpto : 0;
+    const ratioKg = kgTotalPpto>0 ? kgReal/kgTotalPpto : 0;
     // Lote-Red "cerrado": ya se barrió el 100% (o más) de las Has Ppto.
     const cerrado = e.has>0 && avHa >= e.has - 0.05;
 
@@ -1174,23 +1181,25 @@ function renderAvance(){
     dataRows.push({
       lote: e.lote, red: e.red, hasPpto: e.has, haSelectivo, haBarrido, avHa,
       kgxhaPpto, kgTotalPpto, kgReal, kgxhaReal, varKgHa: kgxhaReal - kgxhaPpto,
-      estadoPct: ratio, cerrado
+      estadoPct: ratio, cumplKgPct: ratioKg, cerrado
     });
 
     return `<tr${cerrado ? ' style="background:#E3F1E6;"' : ''}><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td>
       <td class="num">${fmt1(haSelectivo)}</td><td class="num">${fmt1(haBarrido)}</td><td class="num">${fmt1(avHa)}${cerrado ? ' ✅' : ''}</td>
       <td class="num">${fmt(kgxhaPpto)}</td><td class="num">${fmt(kgTotalPpto)}</td><td class="num">${fmt(kgReal)}</td>
-      <td class="num">${fmt(kgxhaReal)}</td><td class="num">${fmt(kgxhaReal - kgxhaPpto)}</td><td>${estadoPill(ratio)}</td></tr>`;
+      <td class="num">${fmt(kgxhaReal)}</td><td class="num">${fmt(kgxhaReal - kgxhaPpto)}</td><td>${estadoPill(ratio)}</td>
+      <td>${estadoPillKg(ratioKg)}</td></tr>`;
   }).join('');
   const totKgxHaPpto = totHas>0 ? totKgP/totHas : 0;
   const totKgxHaReal = totAvHa>0 ? totKgR/totAvHa : 0;
   const totRatio = totKgxHaPpto>0 ? totKgxHaReal/totKgxHaPpto : 0;
+  const totRatioKg = totKgP>0 ? totKgR/totKgP : 0;
   const totRow = `<tr><td colspan="2"><b>Total / Prom.</b></td><td class="num"><b>${fmt1(totHas)}</b></td>
     <td class="num"><b>${fmt1(totSelectivo)}</b></td><td class="num"><b>${fmt1(totBarrido)}</b></td>
     <td class="num"><b>${fmt1(totAvHa)}</b></td><td class="num"><b>${fmt(totKgxHaPpto)}</b></td>
     <td class="num"><b>${fmt(totKgP)}</b></td><td class="num"><b>${fmt(totKgR)}</b></td>
     <td class="num"><b>${fmt(totKgxHaReal)}</b></td><td class="num"><b>${fmt(totKgxHaReal-totKgxHaPpto)}</b></td>
-    <td><b>${estadoPill(totRatio)}</b></td></tr>`;
+    <td><b>${estadoPill(totRatio)}</b></td><td><b>${estadoPillKg(totRatioKg)}</b></td></tr>`;
   document.getElementById('tableAvance').innerHTML = thead + rowsHtml + totRow;
 
   lastAvanceData = {
@@ -1198,7 +1207,8 @@ function renderAvance(){
     totals: {
       hasPpto: totHas, haSelectivo: totSelectivo, haBarrido: totBarrido, avHa: totAvHa,
       kgxhaPpto: totKgxHaPpto, kgTotalPpto: totKgP, kgReal: totKgR,
-      kgxhaReal: totKgxHaReal, varKgHa: totKgxHaReal - totKgxHaPpto, estadoPct: totRatio
+      kgxhaReal: totKgxHaReal, varKgHa: totKgxHaReal - totKgxHaPpto, estadoPct: totRatio,
+      cumplKgPct: totRatioKg
     }
   };
 }
@@ -1211,7 +1221,7 @@ function exportAvanceToExcel(){
     return;
   }
   const headers = ['Lote','Red','Has Ppto','Ha Selectivo','Ha Barrido/DS','Av. Ha',
-    'Kg/Ha Ppto','Kg Total Ppto','Kg Total Real','Kg/Ha Real','Var. Kg/Ha','% Cumpl. vs Ppto','Cerrado'];
+    'Kg/Ha Ppto','Kg Total Ppto','Kg Total Real','Kg/Ha Real','Var. Kg/Ha','% Cumpl. vs Ppto','% Cumpl. Kg Total','Cerrado'];
   const aoa = [headers];
   lastAvanceData.rows.forEach(r=>{
     aoa.push([
@@ -1219,6 +1229,7 @@ function exportAvanceToExcel(){
       round1(r.hasPpto), round1(r.haSelectivo), round1(r.haBarrido), round1(r.avHa),
       Math.round(r.kgxhaPpto), Math.round(r.kgTotalPpto), Math.round(r.kgReal),
       Math.round(r.kgxhaReal), Math.round(r.varKgHa), round1(r.estadoPct*100),
+      round1(r.cumplKgPct*100),
       r.cerrado ? 'Sí' : 'No'
     ]);
   });
@@ -1227,7 +1238,8 @@ function exportAvanceToExcel(){
     'Total / Prom.', '',
     round1(t.hasPpto), round1(t.haSelectivo), round1(t.haBarrido), round1(t.avHa),
     Math.round(t.kgxhaPpto), Math.round(t.kgTotalPpto), Math.round(t.kgReal),
-    Math.round(t.kgxhaReal), Math.round(t.varKgHa), round1(t.estadoPct*100), ''
+    Math.round(t.kgxhaReal), Math.round(t.varKgHa), round1(t.estadoPct*100),
+    round1(t.cumplKgPct*100), ''
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
