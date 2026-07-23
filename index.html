@@ -1101,6 +1101,30 @@ function baseSectorCode(sector){
   return m ? m[1] : sector;
 }
 
+// Señal de cierre basada en la columna "Cerrado" del archivo de hectáreas (marcada por el
+// usuario en campo evento a evento), independiente del filtro de Variedad activo — el cierre
+// de un sector es un hecho físico, no depende de qué variedad se esté mirando en el dashboard.
+// Un Lote-Red se considera "cerrado por bandera" cuando, para CADA sector físico (base, sin el
+// sufijo de renovación) que tiene registros de barrido, el evento más reciente vino marcado
+// Cerrado = Sí.
+function computeCerradoFlagPorLoteRed(){
+  const bySector = new Map(); // lote|red|baseSector -> {fecha, cerrado}
+  hectareas.forEach(h=>{
+    if(!(h.tipo==='BARRER' || h.tipo==='BARRER DS')) return;
+    const key = h.lote+'|'+h.red+'|'+baseSectorCode(h.sector);
+    const prev = bySector.get(key);
+    if(!prev || h.fecha >= prev.fecha) bySector.set(key, {fecha:h.fecha, cerrado: !!h.cerrado});
+  });
+  const out = new Map(); // lote-red -> boolean
+  bySector.forEach((v, key)=>{
+    const [lote, red] = key.split('|');
+    const keyLR = lote+'-'+red;
+    if(!out.has(keyLR)) out.set(keyLR, true);
+    if(!v.cerrado) out.set(keyLR, false);
+  });
+  return out;
+}
+
 function computeHaAvancePorLoteRed(){
   const sectorSelectivo = new Map(); // key: lote|red|sector(exacto) -> {haSum, supSum, supN, lote, red, sector}
   const sectorBarrido = new Map();
@@ -1156,6 +1180,7 @@ function renderAvance(){
     <th class="num">Kg/Ha Ppto</th><th class="num">Kg Total Ppto</th><th class="num">Kg Total Real</th>
     <th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Estado vs Ppto</th><th>% Cumpl. Kg Total</th></tr>`;
   const { selectivo: selectivoMap, barrido: barridoMap } = computeHaAvancePorLoteRed();
+  const cerradoFlagMap = computeCerradoFlagPorLoteRed();
   let totHas=0, totKgP=0, totAvHa=0, totKgR=0, totBarrido=0, totSelectivo=0;
   const dataRows = [];
   const rowsHtml = ESTIMACION.map(e=>{
@@ -1172,8 +1197,13 @@ function renderAvance(){
     const kgxhaReal = avHa>0 ? kgReal/avHa : 0;
     const ratio = kgxhaPpto>0 ? kgxhaReal/kgxhaPpto : 0;
     const ratioKg = kgTotalPpto>0 ? kgReal/kgTotalPpto : 0;
-    // Lote-Red "cerrado": ya se barrió el 100% (o más) de las Has Ppto.
-    const cerrado = e.has>0 && avHa >= e.has - 0.05;
+    // Lote-Red "cerrado": ya se barrió el 100% (o más) de las Has Ppto, O el archivo de
+    // hectáreas trae marcado Cerrado=Sí en el último evento de cada sector físico (esta segunda
+    // señal detecta el cierre incluso cuando el acumulado de Ha todavía no alcanza el umbral,
+    // p.ej. por descuadres menores entre Has Ppto y la superficie física real de los sectores).
+    const key2 = e.lote+'-'+e.red;
+    const cerradoPorFlag = cerradoFlagMap.get(key2) === true;
+    const cerrado = (e.has>0 && avHa >= e.has - 0.05) || cerradoPorFlag;
 
     totHas+=e.has; totKgP+=kgTotalPpto; totAvHa+=avHa; totKgR+=kgReal;
     totBarrido+=haBarrido; totSelectivo+=haSelectivo;
@@ -1827,10 +1857,12 @@ function parseHectareasRows(rows){
   const kTipo = findKey(sample, ['TipoCosecha']);
   const kHa = findKey(sample, ['Ha']);
   const kSup = findKey(sample, ['Superficie_Ha','Superficie']);
+  const kCerrado = findKey(sample, ['Cerrado']);
   if(!kFecha || !kUbic || !kVar || !kTipo || !kHa) throw new Error('Faltan columnas esperadas en el archivo de hectáreas.');
   return rows.filter(r=>r[kUbic]).map(r=>{
     const parts = String(r[kUbic]).trim().split(' ');
     const haVal = parseFloat(r[kHa]) || 0;
+    const cerradoRaw = kCerrado ? String(r[kCerrado] ?? '').trim().toLowerCase() : '';
     return {
       fecha: formatDateCell(r[kFecha]),
       lote: parseInt((parts[0]||'').replace(/[^0-9]/g,'')),
@@ -1840,6 +1872,7 @@ function parseHectareasRows(rows){
       tipo: String(r[kTipo]).trim().toUpperCase(),
       ha: haVal,
       superficie: kSup ? (parseFloat(r[kSup]) || haVal) : haVal,
+      cerrado: cerradoRaw === 'si' || cerradoRaw === 'sí',
     };
   });
 }
