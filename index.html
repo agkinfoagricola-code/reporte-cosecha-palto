@@ -1203,7 +1203,12 @@ function renderAvance(){
     // p.ej. por descuadres menores entre Has Ppto y la superficie física real de los sectores).
     const key2 = e.lote+'-'+e.red;
     const cerradoPorFlag = cerradoFlagMap.get(key2) === true;
-    const cerrado = (e.has>0 && avHa >= e.has - 0.05) || cerradoPorFlag;
+    // OJO: la bandera de cierre no respeta el filtro de Variedad (es un hecho físico del terreno),
+    // pero un mismo sector puede tener el pase de Barrer tageado con una variedad distinta a la
+    // que después se cosecha ahí (p.ej. Barrer registrado como Ettinger y luego Selectivo como
+    // Hass en el mismo sector). Por eso exigimos avHa>0 en la variedad activa: si la vista actual
+    // no muestra ningún avance, nunca se marca cerrado aunque la bandera del archivo diga Sí.
+    const cerrado = (e.has>0 && avHa >= e.has - 0.05) || (cerradoPorFlag && avHa > 0);
 
     totHas+=e.has; totKgP+=kgTotalPpto; totAvHa+=avHa; totKgR+=kgReal;
     totBarrido+=haBarrido; totSelectivo+=haSelectivo;
