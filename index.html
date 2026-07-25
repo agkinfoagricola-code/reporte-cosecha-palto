@@ -566,6 +566,15 @@
         ya guardada — puedes subir un solo día suelto o un consolidado con varios días.
       </p>
       <input type="file" id="fileTareo" accept=".xlsx,.xls">
+      <label>Excel de Calibres (reporte de pallets/cajas)</label>
+      <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
+        Mismo formato del reporte de calibres a nivel pallet: columnas F. Cosecha, Lote - Red,
+        Variedad, Cajas Equi., CAL, CAT. Se agrega automáticamente a % por calibre europeo (8 al
+        34S) y peso promedio por fecha y Lote-Red, usando solo cajas de Categoría I. <b>Al
+        guardar, esto actualiza solo las combinaciones fecha + Lote-Red presentes en el
+        archivo</b> y conserva el resto del histórico ya guardado.
+      </p>
+      <input type="file" id="fileCalibres" accept=".xlsx,.xls">
       <div class="actions">
         <button class="btn btn-primary" id="applyUpdate">Guardar y aplicar</button>
         <button class="btn btn-ghost" id="resetBtn">Restablecer datos base</button>
@@ -623,6 +632,7 @@ const PLAN_SEMANAL = [{"semana": "2026-06-01", "variedad": "HASS", "kg": 0}, {"s
 
 let balanza = DEFAULT_BALANZA;
 let hectareas = DEFAULT_HECTAREAS;
+let calibres = DEFAULT_CALIBRES;
 let tareo = DEFAULT_TAREO;
 // Códigos de labor considerados "cosechador" (jornales de cosecha + tacheros), separados
 // por variedad para poder cruzarlos con el filtro global de Variedad:
@@ -791,6 +801,12 @@ async function loadStoredData(){
     const { data: tareoRow } = await sb.from('tareo_data').select('data').eq('id', 1).single();
     if(tareoRow && Array.isArray(tareoRow.data) && tareoRow.data.length){
       tareo = tareoRow.data;
+    }
+  }catch(e){}
+  try{
+    const { data: calRow } = await sb.from('calibres_data').select('data').eq('id', 1).single();
+    if(calRow && Array.isArray(calRow.data) && calRow.data.length){
+      calibres = calRow.data;
     }
   }catch(e){}
 }
@@ -1389,13 +1405,13 @@ function calRedOf(loteRed){ const p=(loteRed||'').split('-'); return p[p.length-
 
 function populateCalibresFilters(){
   const selLote = document.getElementById('f6-lote');
-  const lotes = uniq(DEFAULT_CALIBRES.map(d=>calLoteOf(d.loteRed)));
+  const lotes = uniq(calibres.map(d=>calLoteOf(d.loteRed)));
   const prevLote = selLote.value;
   selLote.innerHTML = '<option value="">Todos los lotes</option>' + lotes.map(l=>`<option value="${l}">Lote ${l}</option>`).join('');
   if(lotes.includes(prevLote)) selLote.value = prevLote;
 
   const loteSel = selLote.value;
-  const rowsForLote = loteSel ? DEFAULT_CALIBRES.filter(d=>calLoteOf(d.loteRed)===loteSel) : DEFAULT_CALIBRES;
+  const rowsForLote = loteSel ? calibres.filter(d=>calLoteOf(d.loteRed)===loteSel) : calibres;
   const reds = uniq(rowsForLote.map(d=>calRedOf(d.loteRed)));
   const selRed = document.getElementById('f6-red');
   const prevRed = selRed.value;
@@ -1404,7 +1420,7 @@ function populateCalibresFilters(){
 
   const selVar = document.getElementById('f6-variedad');
   if(!selVar.dataset.filled){
-    const variedades = uniq(DEFAULT_CALIBRES.map(d=>d.variedad));
+    const variedades = uniq(calibres.map(d=>d.variedad));
     selVar.innerHTML = '<option value="">Todas las variedades</option>' + variedades.map(v=>`<option value="${v}">${v}</option>`).join('');
     selVar.dataset.filled = '1';
   }
@@ -1416,7 +1432,7 @@ function calibresFiltered(){
   const fLote = document.getElementById('f6-lote').value;
   const fRed = document.getElementById('f6-red').value;
   const fVar = document.getElementById('f6-variedad').value;
-  return DEFAULT_CALIBRES.filter(d=>{
+  return calibres.filter(d=>{
     if(fLote && calLoteOf(d.loteRed)!==fLote) return false;
     if(fRed && calRedOf(d.loteRed)!==fRed) return false;
     if(fVar && d.variedad!==fVar) return false;
@@ -1747,11 +1763,12 @@ document.getElementById('f5-red').addEventListener('change', renderSectores);
 document.getElementById('resetBtn').addEventListener('click', async ()=>{
   if(currentRole !== 'admin') return;
   if(!confirm('Esto restablece los datos de balanza y hectáreas a la base (30-jun-2026) para TODOS los usuarios. ¿Continuar?')) return;
-  balanza = DEFAULT_BALANZA; hectareas = DEFAULT_HECTAREAS; tareo = DEFAULT_TAREO;
+  balanza = DEFAULT_BALANZA; hectareas = DEFAULT_HECTAREAS; tareo = DEFAULT_TAREO; calibres = DEFAULT_CALIBRES;
   try{
     await sb.from('balanza_data').update({ data: DEFAULT_BALANZA, updated_by: currentUser.email }).eq('id', 1);
     await sb.from('hectareas_data').update({ data: DEFAULT_HECTAREAS, updated_by: currentUser.email }).eq('id', 1);
     await sb.from('tareo_data').update({ data: DEFAULT_TAREO, updated_by: currentUser.email }).eq('id', 1);
+    await sb.from('calibres_data').update({ data: DEFAULT_CALIBRES, updated_by: currentUser.email }).eq('id', 1);
   }catch(e){}
   document.getElementById('updatedChip').textContent = 'Datos: base 08-jul-2026';
   renderAll();
@@ -1916,6 +1933,65 @@ function mergeTareoByDate(existingRows, newRows){
   return kept.concat(newRows);
 }
 
+// Parsea el reporte de calibres a nivel pallet/caja (columnas F. Cosecha, Lote - Red, Variedad,
+// Cajas Equi., CAL, CAT) y lo agrega al mismo formato que usa el reporte "Calibres y Peso Fruto":
+// una fila por (fecha, Lote-Red, Variedad) con el % de cada calibre europeo (8 al 34S) y el peso
+// promedio ponderado (peso teórico = 4 kg ÷ N° de calibre). Solo se consideran cajas de
+// Categoría I (CAT = "I"), que es la fuente que ya usa este reporte.
+const CAL_VALID_SET = new Set(['8','10','12','14','16','18','20','22','24','26','28','30','32S','34S']);
+
+function parseCalibresRawRows(rows){
+  if(!rows.length) return [];
+  const sample = rows[0];
+  const kFecha = findKey(sample, ['F. Cosecha','F Cosecha','Fecha Cosecha']);
+  const kLoteRed = findKey(sample, ['Lote - Red','Lote-Red','LoteRed']);
+  const kVar = findKey(sample, ['Variedad']);
+  const kCajas = findKey(sample, ['Cajas Equi.','Cajas Equi','CajasEqui']);
+  const kCal = findKey(sample, ['CAL']);
+  const kCat = findKey(sample, ['CAT']);
+  if(!kFecha || !kLoteRed || !kVar || !kCajas || !kCal || !kCat) throw new Error('Faltan columnas esperadas en el archivo de calibres (F. Cosecha, Lote - Red, Variedad, Cajas Equi., CAL, CAT).');
+
+  const groups = new Map(); // fecha|loteRed|variedad -> { cajasPorCal: {}, total }
+  rows.forEach(r=>{
+    if(!r[kLoteRed]) return;
+    const cat = String(r[kCat] ?? '').trim().toUpperCase();
+    if(cat !== 'I') return; // solo Categoría I, igual que la fuente original del reporte
+    const calRaw = String(r[kCal] ?? '').trim().toUpperCase();
+    if(!CAL_VALID_SET.has(calRaw)) return; // descarta calibres fuera de 8–34S (36,48,MS,VA,DESCARTE, etc.)
+    const cajas = parseFloat(r[kCajas]) || 0;
+    const key = formatDateCell(r[kFecha]) + '|' + String(r[kLoteRed]).trim() + '|' + String(r[kVar]).trim().toUpperCase();
+    if(!groups.has(key)) groups.set(key, { cajasPorCal: {}, total: 0 });
+    const g = groups.get(key);
+    g.cajasPorCal[calRaw] = (g.cajasPorCal[calRaw] || 0) + cajas;
+    g.total += cajas;
+  });
+
+  const out = [];
+  groups.forEach((g, key)=>{
+    const [fecha, loteRed, variedad] = key.split('|');
+    const cal = {};
+    let peso = 0;
+    CAL_KEYS.forEach(k=>{
+      const kUp = k.toUpperCase();
+      const pct = g.total > 0 ? (g.cajasPorCal[kUp] || 0) / g.total : 0;
+      cal[k] = pct;
+      const n = parseInt(k, 10); // '32s' -> 32, '34s' -> 34
+      if(n) peso += pct * (4 / n);
+    });
+    out.push({ fecha, loteRed, variedad, cajas: g.total, peso, cal });
+  });
+  return out;
+}
+
+// Reemplaza en `calibres` solo las combinaciones (fecha, Lote-Red, Variedad) presentes en
+// `newRows`, conservando el resto del histórico ya guardado — igual que con el tareo, así se
+// puede subir un solo día suelto sin perder los días anteriores.
+function mergeCalibresByKey(existingRows, newRows){
+  const newKeys = new Set(newRows.map(r=>r.fecha+'|'+r.loteRed+'|'+r.variedad));
+  const kept = existingRows.filter(r=>!newKeys.has(r.fecha+'|'+r.loteRed+'|'+r.variedad));
+  return kept.concat(newRows);
+}
+
 document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('statusMsg');
   statusEl.className = 'status-msg';
@@ -1926,7 +2002,8 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   const fileBal = document.getElementById('fileBalanza').files[0];
   const fileHa = document.getElementById('fileHectareas').files[0];
   const fileTareo = document.getElementById('fileTareo').files[0];
-  if(!fileBal && !fileHa && !fileTareo){
+  const fileCal = document.getElementById('fileCalibres').files[0];
+  if(!fileBal && !fileHa && !fileTareo && !fileCal){
     statusEl.className='status-msg err'; statusEl.textContent='Selecciona al menos un archivo Excel para actualizar.'; return;
   }
   statusEl.className='status-msg'; statusEl.textContent='Leyendo archivo(s)…';
@@ -1956,12 +2033,22 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
       if(error) throw new Error(error.message);
       tareo = merged;
     }
+    if(fileCal){
+      const rows = await readExcelFile(fileCal);
+      const parsed = parseCalibresRawRows(rows);
+      if(!parsed.length) throw new Error('El Excel de calibres no tiene filas válidas de Categoría I.');
+      const merged = mergeCalibresByKey(calibres, parsed);
+      const { error } = await sb.from('calibres_data').update({ data: merged, updated_by: currentUser.email }).eq('id', 1);
+      if(error) throw new Error(error.message);
+      calibres = merged;
+    }
     const stamp = new Date().toLocaleString('es-PE', {dateStyle:'short', timeStyle:'short'});
     document.getElementById('updatedChip').textContent = 'Datos actualizados: ' + stamp;
     statusEl.className='status-msg ok'; statusEl.textContent='Datos guardados y aplicados para todos los usuarios.';
     document.getElementById('fileBalanza').value = '';
     document.getElementById('fileHectareas').value = '';
     document.getElementById('fileTareo').value = '';
+    document.getElementById('fileCalibres').value = '';
     renderAll();
   }catch(err){
     statusEl.className='status-msg err'; statusEl.textContent='Error: ' + err.message;
