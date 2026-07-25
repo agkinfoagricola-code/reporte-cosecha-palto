@@ -484,7 +484,6 @@
     <div class="filters">
       <select id="f6-lote"><option value="">Todos los lotes</option></select>
       <select id="f6-red"><option value="">Todas las redes</option></select>
-      <select id="f6-variedad"><option value="">Todas las variedades</option></select>
     </div>
     <p style="font-size:12px; color:#8a8f83; margin:-6px 0 14px 0; max-width:820px;">
       Distribución de calibres (Categoría I) y peso promedio del fruto por Lote-Red y fecha de cosecha.
@@ -877,7 +876,7 @@ function populateFilters(){
         else activeVariedades = [...activeVariedades, v];
       }
       gf.querySelectorAll('button').forEach(b=> b.classList.toggle('active', isVariedadBtnActive(b.dataset.v)));
-      renderInicio(); renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores(); renderCosechadores();
+      renderInicio(); renderKPIs(); renderCosecha(); renderPlan(); renderBins(); renderAvance(); renderSectores(); renderCosechadores(); renderCalibres();
     });
   });
 
@@ -1417,13 +1416,6 @@ function populateCalibresFilters(){
   const prevRed = selRed.value;
   selRed.innerHTML = '<option value="">Todas las redes</option>' + reds.map(r=>`<option value="${r}">${r}</option>`).join('');
   if(reds.includes(prevRed)) selRed.value = prevRed;
-
-  const selVar = document.getElementById('f6-variedad');
-  if(!selVar.dataset.filled){
-    const variedades = uniq(calibres.map(d=>d.variedad));
-    selVar.innerHTML = '<option value="">Todas las variedades</option>' + variedades.map(v=>`<option value="${v}">${v}</option>`).join('');
-    selVar.dataset.filled = '1';
-  }
 }
 
 let lastCalibresRows = [];
@@ -1431,11 +1423,9 @@ let lastCalibresRows = [];
 function calibresFiltered(){
   const fLote = document.getElementById('f6-lote').value;
   const fRed = document.getElementById('f6-red').value;
-  const fVar = document.getElementById('f6-variedad').value;
   return calibres.filter(d=>{
     if(fLote && calLoteOf(d.loteRed)!==fLote) return false;
     if(fRed && calRedOf(d.loteRed)!==fRed) return false;
-    if(fVar && d.variedad!==fVar) return false;
     if(activeVariedades.length && !matchVariedad(d.variedad)) return false;
     return true;
   }).sort((a,b)=> a.fecha===b.fecha ? a.loteRed.localeCompare(b.loteRed) : (a.fecha < b.fecha ? 1 : -1));
@@ -1508,7 +1498,6 @@ function exportCalibresToExcel(){
 
 document.getElementById('f6-lote').addEventListener('change', ()=>{ populateCalibresFilters(); renderCalibres(); });
 document.getElementById('f6-red').addEventListener('change', renderCalibres);
-document.getElementById('f6-variedad').addEventListener('change', renderCalibres);
 document.getElementById('exportCalibresBtn').addEventListener('click', exportCalibresToExcel);
 
 function quincenaLabelFor(dateStr){
