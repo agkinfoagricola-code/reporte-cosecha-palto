@@ -828,7 +828,9 @@ function sumBy(rows, keyFn, valFn){
 }
 
 function isoWeekStart(dateStr){
+  if(!dateStr) return null;
   const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return null;
   const day = (d.getDay() + 6) % 7; // Mon=0
   d.setDate(d.getDate() - day);
   return d.toISOString().slice(0,10);
@@ -982,6 +984,7 @@ function renderPlan(){
   const realByWeek = new Map();
   rows.forEach(r=>{
     const w = isoWeekStart(r.fecha);
+    if(!w) return;
     realByWeek.set(w, (realByWeek.get(w)||0)+r.kg);
   });
   const planByWeek = new Map();
@@ -1028,11 +1031,12 @@ function renderBins(){
   const byWeekVar = new Map();
   rows.forEach(r=>{
     const w = isoWeekStart(r.fecha);
+    if(!w) return;
     const k = w+'|'+r.variedad;
     if(!byWeekVar.has(k)) byWeekVar.set(k, {kg:0, bines:0});
     const o = byWeekVar.get(k); o.kg+=r.kg; o.bines+=(r.bines||0);
   });
-  const weeks = uniq(rows.map(r=>isoWeekStart(r.fecha)));
+  const weeks = uniq(rows.map(r=>isoWeekStart(r.fecha)).filter(Boolean));
   let thead = '<tr><th>Semana</th>' + variedades.map(v=>`<th class="num">${v}</th>`).join('') + '</tr>';
   let tbody = weeks.sort().map(w=>{
     const cells = variedades.map(v=>{
