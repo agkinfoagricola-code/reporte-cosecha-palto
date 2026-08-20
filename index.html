@@ -465,13 +465,15 @@
     <div class="filters">
       <select id="f5-lote"></select>
       <select id="f5-red"><option value="">Todas las redes</option></select>
+      <input type="text" id="f5-sectorSearch" placeholder="Filtrar sectores (ej: 43,47,48,50)" style="min-width:220px;">
     </div>
     <p style="font-size:12px; color:#8a8f83; margin:-6px 0 14px 0; max-width:820px;">
       Cada fila de sector muestra su Ha Ppto (área física) y Ha Real (avance real: Barrer/DS o Selectivo topado al área)
       — ambas son datos reales por sector. El Kg Ppto por sector es un prorrateo del presupuesto del lote-red según el
-      área de cada uno, solo referencial. <b>La comparación contra el presupuesto (Kg/ha, %Cump) se hace únicamente en
-      la fila "Total"</b> de cada Lote-Red-Variedad, sumando primero todos sus sectores — ahí sí se compara contra el
-      Kg Real que sí existe a ese nivel (la balanza no pesa por sector, solo por Lote-Red).
+      área de cada uno, solo referencial (por eso el <b>Kg Ppto/Ha</b> de cada sector siempre da igual al del total del
+      Lote-Red: es el mismo presupuesto repartido). <b>La comparación contra el presupuesto (Kg/ha, %Cump) se hace
+      únicamente en la fila "Total"</b> de cada Lote-Red-Variedad, sumando primero todos sus sectores — ahí sí se
+      compara contra el Kg Real que sí existe a ese nivel (la balanza no pesa por sector, solo por Lote-Red).
     </p>
     <div class="panel">
       <h3>Detalle por Lote-Red-Sector</h3>
@@ -1332,18 +1334,27 @@ function renderSectores(){
   if(!fLote){ document.getElementById('tableSectores').innerHTML = ''; return; }
   const fRed = document.getElementById('f5-red').value;
 
-  const sectorDetails = computeSectorDetails().filter(s => String(s.lote)===String(fLote) && (!fRed || s.red===fRed));
+  let sectorDetails = computeSectorDetails().filter(s => String(s.lote)===String(fLote) && (!fRed || s.red===fRed));
   const variedades = activeVariedades.length ? activeVariedades : ['HASS','ETTINGER','ZUTANO'];
 
+  // filtro de búsqueda por número de sector: acepta lista separada por comas, ej "43,47,48,50"
+  const sectorSearchRaw = (document.getElementById('f5-sectorSearch').value || '').trim();
+  if(sectorSearchRaw){
+    const wanted = sectorSearchRaw.split(',').map(x=>x.trim()).filter(Boolean);
+    sectorDetails = sectorDetails.filter(s => wanted.some(w => s.sector.toUpperCase().includes(w.toUpperCase())));
+  }
+
   // suma de superficie por lote-red, para prorratear el Kg Ppto de cada sector (solo referencial a nivel sector)
+  // OJO: se calcula ANTES del filtro de búsqueda, sobre todos los sectores de ese lote-red, para que el
+  // prorrateo (y por tanto el Kg Ppto/Ha) no cambie según lo que el usuario esté buscando.
   const supSumByLoteRed = new Map();
-  sectorDetails.forEach(s=>{
+  computeSectorDetails().filter(s => String(s.lote)===String(fLote) && (!fRed || s.red===fRed)).forEach(s=>{
     const key = s.lote+'-'+s.red;
     supSumByLoteRed.set(key, (supSumByLoteRed.get(key)||0) + s.superficie);
   });
 
   let thead = `<tr><th>LR Sector</th><th>Variedad</th><th class="num">Ha Ppto</th><th class="num">Ha Real</th>
-    <th class="num">Diferencia Ha</th><th class="num">Kg Ppto (prorrateado)</th><th>Cerrado</th></tr>`;
+    <th class="num">Diferencia Ha</th><th class="num">Kg Ppto (prorrateado)</th><th class="num">Kg Ppto/Ha</th><th>Cerrado</th></tr>`;
 
   const barCell = (frac) => {
     const w = Math.max(0, Math.min(100, frac*100));
@@ -1370,10 +1381,12 @@ function renderSectores(){
       sectoresDeRed.forEach(s=>{
         const share = supSum>0 ? s.superficie/supSum : 0;
         const kgPptoSector = kgPptoVariedad(e, v) * share;
+        const kgHaPptoSector = s.superficie>0 ? kgPptoSector/s.superficie : 0;
         const diff = s.superficie - s.areaSector;
         body += `<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
           <td class="num">${fmt1(s.superficie)}</td><td class="num">${fmt1(s.areaSector)}</td>
           <td class="num">${fmt1(diff)}</td><td class="num">${fmt(kgPptoSector)}</td>
+          <td class="num">${fmt(kgHaPptoSector)}</td>
           <td style="text-align:center;">${s.barrido? '✅':'—'}</td></tr>`;
       });
 
@@ -1390,6 +1403,7 @@ function renderSectores(){
         <td class="num">${fmt1(haPptoTotal)}</td><td class="num">${fmt1(haRealTotal)}</td>
         <td class="num">${fmt1(haPptoTotal-haRealTotal)}</td>
         <td class="num">${fmt(kgPptoTotal)}<br><span style="font-weight:400; font-size:10.5px; color:#6b7266;">real: ${fmt(kgRealTotal)}</span></td>
+        <td class="num">${fmt(kgHaPpto)}<br><span style="font-weight:400; font-size:10.5px; color:#6b7266;">real: ${fmt(kgHaReal)}</span></td>
         <td>${barCell(cump)}</td></tr>`;
     });
   });
@@ -1751,6 +1765,7 @@ document.getElementById('sidebarScrim').addEventListener('click', closeSidebarMo
 document.getElementById('f1-lote').addEventListener('change', renderCosecha);
 document.getElementById('f5-lote').addEventListener('change', ()=>{ populateSectorFilters(); renderSectores(); });
 document.getElementById('f5-red').addEventListener('change', renderSectores);
+document.getElementById('f5-sectorSearch').addEventListener('input', renderSectores);
 
 /* ============ ACTUALIZAR DATOS (página, antes modal) ============ */
 document.getElementById('resetBtn').addEventListener('click', async ()=>{
