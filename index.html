@@ -1092,16 +1092,20 @@ function computeSectorDetails(){
   const bySector = new Map();
   hectareas.forEach(h=>{
     const k = h.lote+'|'+h.red+'|'+h.sector;
-    if(!bySector.has(k)) bySector.set(k, {superficieSum:0, superficieN:0, barrido:false, selectivaHa:0, lote:h.lote, red:h.red, sector:h.sector});
+    if(!bySector.has(k)) bySector.set(k, {superficieSum:0, superficieN:0, barrido:false, barridoHa:0, selectivaHa:0, lote:h.lote, red:h.red, sector:h.sector});
     const o = bySector.get(k);
     o.superficieSum += (h.superficie ?? h.ha) || 0;
     o.superficieN += 1;
-    if(h.tipo==='BARRER' || h.tipo==='BARRER DS') o.barrido = true;
-    if(h.tipo==='SELECTIVA' || h.tipo==='SELECTIVO 300 A MAS [CAL 14]') o.selectivaHa += h.ha;
+    // OJO: antes esto solo marcaba una bandera "barrido=true/false" y, si había cualquier pase de
+    // Barrer/DS, se asignaba el 100% de la superficie como área avanzada — eso ignoraba que un
+    // sector puede estar barrido solo parcialmente. Ahora se suman las Ha reales de cada pase de
+    // Barrer/DS (igual que en Avance), y esa suma se capa a la superficie del sector más abajo.
+    if(h.tipo==='BARRER' || h.tipo==='BARRER DS'){ o.barrido = true; o.barridoHa += (h.ha||0); }
+    if(h.tipo==='SELECTIVA' || h.tipo==='SELECTIVO 300 A MAS [CAL 14]') o.selectivaHa += (h.ha||0);
   });
   return [...bySector.values()].map(o=>{
     const superficie = o.superficieN>0 ? o.superficieSum/o.superficieN : 0;
-    const areaSector = o.barrido ? superficie : Math.min(o.selectivaHa, superficie);
+    const areaSector = o.barrido ? Math.min(o.barridoHa, superficie) : Math.min(o.selectivaHa, superficie);
     return { lote:o.lote, red:o.red, sector:o.sector, superficie, areaSector, barrido:o.barrido };
   });
 }
