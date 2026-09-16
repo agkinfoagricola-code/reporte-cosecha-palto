@@ -70,9 +70,10 @@ function computeSectorDetails(){
 //   física nueva — si el mismo sector base aparece bajo dos códigos de renovación distintos (ej.
 //   "S46-R20" y "S46-R22"), es la MISMA área física repasada bajo otro código, así que entre esas
 //   variantes se toma el MÁXIMO (no se suman) para no duplicar la hectárea.
-function computeCerradoFlagPorLoteRed(){
+function computeCerradoFlagPorLoteRed(source){
+  const rows = source || hectareas;
   const bySector = new Map(); // lote|red|baseSector -> {fecha, cerrado}
-  hectareas.forEach(h=>{
+  rows.forEach(h=>{
     if(!(h.tipo==='BARRER' || h.tipo==='BARRER DS')) return;
     const key = h.lote+'|'+h.red+'|'+baseSectorCode(h.sector);
     const prev = bySector.get(key);
@@ -88,11 +89,12 @@ function computeCerradoFlagPorLoteRed(){
   return out;
 }
 
-function computeHaAvancePorLoteRed(){
+function computeHaAvancePorLoteRed(source){
+  const rows = source || hectareas;
   const sectorSelectivo = new Map(); // key: lote|red|sector(exacto) -> {haSum, supSum, supN, lote, red, sector}
   const sectorBarrido = new Map();
 
-  hectareas.forEach(h=>{
+  rows.forEach(h=>{
     if(!matchVariedad(h.variedad)) return;
     const ha = h.ha || 0;
     const keySec = h.lote+'|'+h.red+'|'+h.sector;
@@ -133,5 +135,66 @@ function computeHaAvancePorLoteRed(){
   };
 
   return { selectivo: aggregateCapped(sectorSelectivo), barrido: aggregateCapped(sectorBarrido) };
+}
+
+/* ============ ARÁNDANO: detalle por sector (Lote-Red-Sector) ============
+   A partir de hectareasArandano (el avance de campo reportado por el líder, que SÍ trae
+   Sector) arma un detalle por sector con su Variedad y su Hectarea. Como en Arándano no hay
+   Selectivo/Barrido ni avance acumulado (ver computeAvanceArandanoPorLoteRed), un sector
+   reportado cuenta con el 100% de su Hectarea activa — no hay "Ha Real" distinta de "Ha Ppto"
+   a nivel sector, así que esta vista solo necesita una columna de Ha por sector. */
+function computeSectorDetailsArandano(){
+  const bySector = new Map(); // "lote|red|sector" -> {lote, red, sector, variedad, superficie}
+  hectareasArandano.forEach(h=>{
+    const key = h.lote+'|'+h.red+'|'+h.sector;
+    if(!bySector.has(key)) bySector.set(key, { lote: h.lote, red: h.red, sector: h.sector, variedad: h.variedad, superficie: 0 });
+    const o = bySector.get(key);
+    o.superficie = Math.max(o.superficie, h.superficie || 0);
+    if(!o.variedad) o.variedad = h.variedad;
+  });
+  return [...bySector.values()];
+}
+
+/* ============ ARÁNDANO: avance de campo por Lote-Red (reportado por el líder) ============
+   A diferencia de Palto, acá NO hay tipos de pase (Selectivo/Barrer) ni avance acumulado de
+   campaña: el mismo sector se cosecha varias rondas por semana/mes, así que una vez que el
+   líder reporta un sector, éste queda con su Hectarea COMPLETA activa en cosecha — no importa
+   cuántas veces ni en qué fechas se repita. Por eso acá solo se deduplica por Lote-Red-Sector
+   (tomando su Hectarea, que es constante) y se suma por Lote-Red. */
+function computeAvanceArandanoPorLoteRed(source){
+  const rows = source || hectareasArandano;
+  const bySector = new Map(); // "lote|red|sector" -> {ha, lote, red}
+  rows.forEach(h=>{
+    const key = h.lote+'|'+h.red+'|'+h.sector;
+    const ha = h.superficie ?? h.ha ?? 0;
+    if(!bySector.has(key)) bySector.set(key, { ha, lote: h.lote, red: h.red });
+    else bySector.get(key).ha = Math.max(bySector.get(key).ha, ha); // por si la Hectarea difiere entre filas, se toma la mayor
+  });
+  const out = new Map(); // "lote-red" -> Ha
+  bySector.forEach(o=>{
+    const keyLR = o.lote+'-'+o.red;
+    out.set(keyLR, (out.get(keyLR)||0) + o.ha);
+  });
+  return out;
+}
+
+/* ============ ARÁNDANO: agregado de presupuesto por Lote-Red ============
+   estimacionArandanoLoteRed trae una fila por (lote, red, variedad) con {has, kgPpto}
+   (cargada por Excel, ver js/carga-datos.js — a diferencia de Palto no viene fija en el
+   código porque no se cuenta con esa data base). Esta función agrupa por Lote-Red sumando
+   Has y Kg Ppto SOLO de las variedades incluidas en el filtro global de Variedad (`sel`);
+   con el filtro vacío ("Todas") se suman todas las variedades presentes en ese Lote-Red. */
+function computeEstimacionArandanoAgregado(sel){
+  const arr = Array.isArray(sel) ? sel : (sel ? [sel] : []);
+  const map = new Map(); // "lote-red" -> {lote, red, has, kgPpto}
+  estimacionArandanoLoteRed.forEach(e=>{
+    if(arr.length && !arr.includes(e.variedad)) return;
+    const key = e.lote+'-'+e.red;
+    if(!map.has(key)) map.set(key, { lote: e.lote, red: e.red, has: 0, kgPpto: 0 });
+    const o = map.get(key);
+    o.has += e.has || 0;
+    o.kgPpto += e.kgPpto || 0;
+  });
+  return map;
 }
 

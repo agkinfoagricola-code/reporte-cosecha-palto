@@ -7,6 +7,7 @@
 let sectoresPage = 0; // página actual de "Detalle por Lote-Red-Sector"
 
 function renderSectores(){
+  if(cultivoActivo === 'arandano'){ renderSectoresArandano(); return; }
   const fLote = document.getElementById('f5-lote').value; // '' = Todos los lotes
   const fRed = document.getElementById('f5-red').value;
   const lotesAProcesar = fLote ? [String(fLote)] : uniq(ESTIMACION.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
@@ -148,6 +149,130 @@ function renderSectores(){
       <button class="btn btn-ghost" id="sectoresNext" style="padding:6px 12px;" ${sectoresPage>=totalPaginasS-1?'disabled':''}>Siguiente ›</button>`;
     document.getElementById('sectoresPrev').addEventListener('click', ()=>{ sectoresPage--; renderSectores(); });
     document.getElementById('sectoresNext').addEventListener('click', ()=>{ sectoresPage++; renderSectores(); });
+  }
+}
+
+/* ============ PAGE 5 (ARÁNDANO): DETALLE SECTORES — prorrateo por Ha ============
+   El presupuesto de Arándano (estimacionArandanoLoteRed) solo viene a nivel Lote-Red-Variedad
+   (no trae Sector — ver Excel de estimación), así que el Kg Ppto de cada Lote-Red-Variedad se
+   reparte entre sus sectores según su participación en la Hectarea total reportada por el
+   líder (computeSectorDetailsArandano) — el mismo criterio de prorrateo que usa Palto cuando
+   todavía no tiene bines cargados. El mismo % se aplica al Kg Real de balanza. Si en el futuro
+   se carga un comparativo de jabas por sector, se puede agregar acá un fallback igual al de
+   shareBinesPorLoteRed() en Palto. */
+function renderSectoresArandano(){
+  const fLote = document.getElementById('f5-lote').value;
+  const fRed = document.getElementById('f5-red').value;
+  const lotesAProcesar = fLote ? [String(fLote)] : uniq(estimacionArandanoLoteRed.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
+
+  let sectorDetails = computeSectorDetailsArandano().filter(s => lotesAProcesar.includes(String(s.lote)) && (!fRed || s.red===fRed));
+
+  const sectorSearchRaw = (document.getElementById('f5-sectorSearch').value || '').trim();
+  if(sectorSearchRaw){
+    const wanted = sectorSearchRaw.split(',').map(x=>x.trim()).filter(Boolean);
+    sectorDetails = sectorDetails.filter(s => wanted.some(w => s.sector.toUpperCase().includes(w.toUpperCase())));
+  }
+
+  // Suma de Ha por Lote-Red-Variedad (antes del filtro de búsqueda de sector) — así el
+  // prorrateo no cambia según lo que el usuario esté buscando.
+  const supSumByKey = new Map(); // "lote-red-variedad" -> Ha total
+  computeSectorDetailsArandano().filter(s => lotesAProcesar.includes(String(s.lote)) && (!fRed || s.red===fRed)).forEach(s=>{
+    const key = s.lote+'-'+s.red+'-'+s.variedad;
+    supSumByKey.set(key, (supSumByKey.get(key)||0) + s.superficie);
+  });
+
+  let thead = `<tr><th>LR Sector</th><th>Variedad</th><th class="num">Ha</th>
+    <th class="num">Kg Ppto</th><th class="num">Kg Real</th>
+    <th class="num">Kg Ppto/Ha</th><th class="num">Kg Real/Ha</th><th>Kg/Ha Ppto vs Kg/Ha Real</th><th class="num">% del Lote-Red</th></tr>`;
+
+  const filas = [];
+
+  lotesAProcesar.forEach(lote=>{
+    const sectorDetailsDeLote = sectorDetails.filter(s=>String(s.lote)===lote);
+    const reds = uniq(sectorDetailsDeLote.map(s=>s.red));
+    reds.forEach(red=>{
+      const sectoresDeRed = sectorDetailsDeLote.filter(s=>s.red===red).sort((a,b)=> a.sector.localeCompare(b.sector));
+      const variedadesDeRed = uniq(sectoresDeRed.map(s=>s.variedad))
+        .filter(v=> activeVariedades.length===0 || activeVariedades.includes(v));
+
+      variedadesDeRed.forEach(v=>{
+        const e = estimacionArandanoLoteRed.find(x=> String(x.lote)===lote && x.red===red && x.variedad===v);
+        if(!e) return; // no hay presupuesto cargado para esta combinación Lote-Red-Variedad
+
+        const sectoresDeVariedad = sectoresDeRed.filter(s=>s.variedad===v);
+        const supSum = supSumByKey.get(lote+'-'+red+'-'+v) || 0;
+
+        const kgRealTotal = balanza.filter(b=> String(b.lote)===lote && b.red===red && b.variedad===v).reduce((s,r)=>s+r.kg,0);
+        const haTotal = sectoresDeVariedad.reduce((s,x)=>s+x.superficie,0);
+        const kgPptoTotal = e.kgPpto;
+        const kgHaPpto = e.has>0 ? e.kgPpto/e.has : 0;
+        const kgHaReal = haTotal>0 ? kgRealTotal/haTotal : 0;
+        const cump = kgHaPpto>0 ? kgHaReal/kgHaPpto : 0;
+
+        filas.push(`<tr style="background:#EEF3EE; font-weight:600;">
+          <td colspan="2">Total Lote ${lote} - ${red} - ${v}</td>
+          <td class="num">${fmt1(haTotal)}</td>
+          <td class="num">${fmt(kgPptoTotal)}</td>
+          <td class="num">${fmt(kgRealTotal)}</td>
+          <td class="num">${fmt(kgHaPpto)}</td>
+          <td class="num">${fmt(kgHaReal)}</td>
+          <td>${estadoPill(cump)}</td>
+          <td class="num">100%</td></tr>`);
+
+        sectoresDeVariedad.forEach(s=>{
+          const share = supSum>0 ? s.superficie/supSum : 0;
+          const kgPptoSector = kgPptoTotal * share;
+          const kgRealSector = kgRealTotal * share;
+          const kgHaPptoSector = s.superficie>0 ? kgPptoSector/s.superficie : 0;
+          const kgHaRealSector = s.superficie>0 ? kgRealSector/s.superficie : 0;
+          // % vs la meta del Lote-Red-Variedad completo (kgHaPpto), no el Kg Ppto/Ha
+          // prorrateado de ESTE sector (que se cancela matemáticamente contra el real y
+          // siempre daría el mismo % en todos los sectores).
+          const ratioSector = kgHaPpto>0 ? kgHaRealSector/kgHaPpto : 0;
+
+          filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
+            <td class="num">${fmt1(s.superficie)}</td>
+            <td class="num">${fmt(kgPptoSector)}</td>
+            <td class="num">${fmt(kgRealSector)}</td>
+            <td class="num">${fmt(kgHaPptoSector)}</td>
+            <td class="num">${fmt(kgHaRealSector)}</td>
+            <td>${estadoPill(ratioSector)}</td>
+            <td class="num">${pct(share)}</td></tr>`);
+        });
+      });
+    });
+  });
+
+  if(!filas.length){
+    document.getElementById('tableSectores').innerHTML = thead +
+      `<tr><td colspan="9" style="text-align:center; color:#8a8f83; padding:24px;">
+        No hay datos de sectores para Arándano todavía. Verifica que hayas cargado el
+        presupuesto (Lote-Red-Variedad) y el avance de campo del líder desde "Carga de Datos".
+      </td></tr>`;
+    document.getElementById('sectoresPager').innerHTML = '';
+    return;
+  }
+
+  // Paginación: mismo patrón que la vista de Palto.
+  const pageSizeSel = document.getElementById('f5-pageSize');
+  const pageSize = pageSizeSel.value === 'todas' ? filas.length || 1 : parseInt(pageSizeSel.value);
+  const totalPaginasS = Math.max(1, Math.ceil(filas.length / pageSize));
+  if(sectoresPage >= totalPaginasS) sectoresPage = totalPaginasS - 1;
+  if(sectoresPage < 0) sectoresPage = 0;
+  const filasPagina = filas.slice(sectoresPage*pageSize, sectoresPage*pageSize + pageSize);
+
+  document.getElementById('tableSectores').innerHTML = thead + filasPagina.join('');
+
+  const pagerEl = document.getElementById('sectoresPager');
+  if(totalPaginasS <= 1){
+    pagerEl.innerHTML = '';
+  } else {
+    pagerEl.innerHTML = `
+      <button class="btn btn-ghost" id="sectoresPrev" style="padding:6px 12px;" ${sectoresPage===0?'disabled':''}>‹ Anterior</button>
+      <span>Página ${sectoresPage+1} de ${totalPaginasS} <span style="color:#8a8f83;">(${filas.length} filas)</span></span>
+      <button class="btn btn-ghost" id="sectoresNext" style="padding:6px 12px;" ${sectoresPage>=totalPaginasS-1?'disabled':''}>Siguiente ›</button>`;
+    document.getElementById('sectoresPrev').addEventListener('click', ()=>{ sectoresPage--; renderSectoresArandano(); });
+    document.getElementById('sectoresNext').addEventListener('click', ()=>{ sectoresPage++; renderSectoresArandano(); });
   }
 }
 

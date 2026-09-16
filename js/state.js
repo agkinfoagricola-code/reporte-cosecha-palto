@@ -3,8 +3,17 @@ let balanzaPalto = DEFAULT_BALANZA;
 let balanzaArandano = [];
 let balanza = balanzaPalto;
 let hectareas = DEFAULT_HECTAREAS;
+// Avance de campo (Lote-Red-Sector) y presupuesto de Ha/Kg por Lote-Red para Arándano —
+// independientes de los de Palto. Vacíos hasta que el admin cargue sus Excel (ver
+// js/carga-datos.js). Formato de hectareasArandano: igual a `hectareas` (fecha, lote, red,
+// sector, variedad, tipo, ha, superficie, cerrado). Formato de estimacionArandanoLoteRed:
+// una fila por (lote, red, variedad) con {lote, red, variedad, has, kgPpto}.
+let hectareasArandano = [];
+let estimacionArandanoLoteRed = [];
+let calibresArandano = [];
 let calibres = DEFAULT_CALIBRES;
 let tareo = DEFAULT_TAREO;
+let tareoArandano = [];
 // Comparativo de bines Lote-Red-Sector (individual/grupal/balanza) — ver js/calculos-bines.js
 // y js/carga-datos.js → parseBinesRows(). Vacío hasta que el admin cargue el primer Excel.
 let bines = DEFAULT_BINES;

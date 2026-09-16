@@ -13,6 +13,8 @@ const PLAN_SEMANAL_ARANDANO = [{"semana":"2026-05-18","variedad":"VENTURA","kg":
 const TAREO_HASS_CODES = new Set([3052]);
 const TAREO_POLINIZANTE_CODES = new Set([3180]);
 const TAREO_COSECHADOR_CODES = new Set([...TAREO_HASS_CODES, ...TAREO_POLINIZANTE_CODES]);
+// Arándano usa un único código de cosecha (no hay split por variedad como en Palto).
+const TAREO_COSECHADOR_CODES_ARANDANO = new Set([5129]); // 5129 = ARA-COSECHADOR
 let charts = {};
 let currentUser = null;
 let currentRole = 'viewer';

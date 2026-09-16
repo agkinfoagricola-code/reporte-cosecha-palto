@@ -26,8 +26,8 @@ function populateFilters(){
         else activeVariedades = [...activeVariedades, v];
       }
       gf.querySelectorAll('button').forEach(b=> b.classList.toggle('active', isVariedadBtnActive(b.dataset.v)));
-      renderKPIs(); renderCosecha(); renderPlan();
-      if(cultivoActivo === 'palto'){ renderInicio(); renderBins(); renderAvance(); renderSectores(); renderCosechadores(); renderCalibres(); }
+      renderKPIs(); renderCosecha(); renderPlan(); renderAvance(); renderSectores(); renderBins(); populateCalibresFilters(); renderCalibres(); renderCosechadores();
+      if(cultivoActivo === 'palto'){ renderInicio(); } else { populateCicloFilters(); renderCiclo(); }
     });
   });
 
@@ -49,13 +49,19 @@ function isVariedadBtnActive(v){
 /* ============ SECTOR-SPECIFIC FILTER POPULATION (página Detalle Sectores) ============ */
 function populateSectorFilters(){
   const selLote = document.getElementById('f5-lote');
-  const lotesConSector = uniq(ESTIMACION.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b));
+  const lotesConSector = cultivoActivo === 'arandano'
+    ? uniq(estimacionArandanoLoteRed.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b))
+    : uniq(ESTIMACION.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b));
   const prevLote = selLote.value;
   selLote.innerHTML = '<option value="">Todos los lotes</option>' + lotesConSector.map(l=>`<option value="${l}">Lote ${l}</option>`).join('');
   if(lotesConSector.map(String).includes(prevLote)) selLote.value = prevLote;
 
   const loteSel = selLote.value;
-  const redsDelLote = loteSel ? uniq(ESTIMACION.filter(e=>e.lote==loteSel).map(e=>e.red)) : [];
+  const redsDelLote = loteSel
+    ? (cultivoActivo === 'arandano'
+        ? uniq(estimacionArandanoLoteRed.filter(e=>e.lote==loteSel).map(e=>e.red))
+        : uniq(ESTIMACION.filter(e=>e.lote==loteSel).map(e=>e.red)))
+    : [];
   const selRed = document.getElementById('f5-red');
   const prevRed = selRed.value;
   selRed.innerHTML = '<option value="">Todas las redes</option>' + redsDelLote.map(r=>`<option value="${r}">${r}</option>`).join('');

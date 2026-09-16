@@ -45,6 +45,14 @@ function weekLabel(dateStr){
   return n != null ? 'Semana ' + n : dateStr;
 }
 
+// Diferencia en días calendario entre dos fechas 'YYYY-MM-DD' (d2 - d1).
+function daysBetween(d1, d2){
+  const a = new Date(d1+'T00:00:00');
+  const b = new Date(d2+'T00:00:00');
+  if(isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  return Math.round((b - a) / 86400000);
+}
+
 // Mapa de calor reutilizable: intensidad de color según qué tan grande es `v` respecto
 // al máximo `max` de su columna/grupo. rgb ej. '27,107,60' (verde) o '45,110,142' (azul).
 function heatShade(v, max, rgb){

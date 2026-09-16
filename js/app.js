@@ -5,22 +5,32 @@ function renderAll(){
   renderKPIs();
   renderCosecha();
   renderPlan();
-  if(cultivoActivo === 'arandano') return;
-  renderInicio();
-  renderBins();
   renderAvance();
   renderSectores();
+  renderBins();
   populateCalibresFilters();
   renderCalibres();
   renderCosechadores();
+  if(cultivoActivo === 'arandano'){ populateCicloFilters(); renderCiclo(); return; }
+  renderInicio();
 }
 
 function configureCultivoUI(){
   const esAra = cultivoActivo === 'arandano';
   document.body.classList.toggle('theme-arandano', esAra);
   document.querySelectorAll('.nav-sub button[data-page]').forEach(btn=>{
-    btn.style.display = (!esAra || ['cosecha','plan'].includes(btn.dataset.page)) ? '' : 'none';
+    const page = btn.dataset.page;
+    if(page === 'ciclo'){ btn.style.display = esAra ? '' : 'none'; return; }
+    btn.style.display = (!esAra || ['cosecha','plan','avance','sectores','bins','calibres','cosechadores'].includes(page)) ? '' : 'none';
   });
+  const navBinsBtn = document.getElementById('navBinsBtn');
+  if(navBinsBtn) navBinsBtn.textContent = esAra ? 'Kg. Jabas' : 'Kg. Bins';
+  const binsSemanaTitle = document.getElementById('binsSemanaTitle');
+  if(binsSemanaTitle) binsSemanaTitle.textContent = esAra ? 'Prom. Kg/Jaba semanal por variedad' : 'Prom. Kg/Bin semanal por variedad';
+  const binsDiaTitle = document.getElementById('binsDiaTitle');
+  if(binsDiaTitle) binsDiaTitle.textContent = esAra ? 'Detalle diario de peso promedio por jaba' : 'Detalle diario de peso promedio por bin';
+  const navCalibresBtn = document.getElementById('navCalibresBtn');
+  if(navCalibresBtn) navCalibresBtn.textContent = esAra ? 'Calibres de Fruto' : 'Calibres y Peso Fruto';
   const upPal = document.getElementById('uploadPaltoBlock');
   const upAra = document.getElementById('uploadArandanoBlock');
   const resetBtn = document.getElementById('resetBtn');
@@ -51,6 +61,7 @@ const PAGE_TITLES = {
   sectores: 'Detalle Sectores',
   calibres: 'Calibres y Peso Fruto',
   cosechadores: 'Kg. / Cosechador',
+  ciclo: 'Días de Ciclo',
   actualizar: 'Carga de Datos',
   usuarios: 'Usuarios'
 };
@@ -62,7 +73,9 @@ document.getElementById('sidebar').addEventListener('click', e=>{
   btn.classList.add('active');
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+btn.dataset.page).classList.add('active');
-  document.getElementById('pageTitle').textContent = PAGE_TITLES[btn.dataset.page] || '';
+  const esAraTitle = cultivoActivo === 'arandano';
+  const ARA_PAGE_TITLES = { bins: 'Kg. Jabas', calibres: 'Calibres de Fruto' };
+  document.getElementById('pageTitle').textContent = (esAraTitle && ARA_PAGE_TITLES[btn.dataset.page]) || PAGE_TITLES[btn.dataset.page] || '';
   if(btn.dataset.page === 'usuarios') loadUsersList();
   closeSidebarMobile();
 });

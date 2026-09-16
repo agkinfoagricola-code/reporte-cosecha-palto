@@ -78,10 +78,11 @@
       <div class="nav-sub">
         <button data-page="cosecha" class="active">Kg. Cosechados</button>
         <button data-page="plan">Kg. Cosechados vs Presupuestados</button>
-        <button data-page="bins">Kg. Bins</button>
+        <button data-page="bins" id="navBinsBtn">Kg. Bins</button>
         <button data-page="avance">Kg Real vs Ppto (x Ha)</button>
         <button data-page="sectores">Detalle Sectores</button>
-        <button data-page="calibres">Calibres y Peso Fruto</button>
+        <button data-page="ciclo" id="navCicloBtn" style="display:none;">Días de Ciclo</button>
+        <button data-page="calibres" id="navCalibresBtn">Calibres y Peso Fruto</button>
         <button data-page="cosechadores">Kg. / Cosechador</button>
       </div>
       <button class="nav-item" data-page="actualizar" id="navActualizar" style="display:none;">⬆️&nbsp; Carga de Datos</button>
@@ -174,13 +175,13 @@
         <canvas id="chartBinsLote"></canvas>
       </div>
       <div class="panel">
-        <h3>Prom. Kg/Bin semanal por variedad</h3>
+        <h3 id="binsSemanaTitle">Prom. Kg/Bin semanal por variedad</h3>
         <div class="tablewrap" style="max-height:320px;"><table id="tableBinsSemana"></table></div>
       </div>
     </div>
     <div class="panel">
       <h3 style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-        <span>Detalle diario de peso promedio por bin</span>
+        <span id="binsDiaTitle">Detalle diario de peso promedio por bin</span>
         <button class="btn btn-ghost" id="exportBinsDiaBtn" style="font-size:12px; padding:7px 14px;">⬇️&nbsp; Descargar Excel</button>
       </h3>
       <div class="filters" style="margin-top:0;">
@@ -227,6 +228,39 @@
     </div>
   </section>
 
+  <!-- PAGE 5b (ARÁNDANO): DÍAS DE CICLO -->
+  <section class="page" id="page-ciclo">
+    <div class="filters">
+      <select id="f8-lote"></select>
+      <select id="f8-red"><option value="">Todas las redes</option></select>
+      <input type="text" id="f8-sectorSearch" placeholder="Filtrar sectores (ej: 43,47,48,50)" style="min-width:220px;">
+      <select id="f8-orden">
+        <option value="alerta">Ordenar: más atrasados primero</option>
+        <option value="lote">Ordenar: Lote-Red-Sector</option>
+        <option value="reciente">Ordenar: última cosecha más reciente</option>
+      </select>
+      <select id="f8-pageSize">
+        <option value="50">50 filas por página</option>
+        <option value="100">100 filas por página</option>
+        <option value="200">200 filas por página</option>
+        <option value="todas">Todas (sin paginar)</option>
+      </select>
+    </div>
+    <section class="kpi-strip" id="kpiCiclo"></section>
+    <div class="panel">
+      <h3 style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <span>Ciclo de cosecha por Lote-Red-Sector <span class="tag">días entre cortes</span></span>
+        <button class="btn btn-ghost" id="exportCicloBtn" style="font-size:12px; padding:7px 14px;">⬇️&nbsp; Descargar Excel</button>
+      </h3>
+      <p style="font-size:12px; color:#8a8f83; margin:0 0 10px 0;">
+        "Días desde último corte" en rojo significa que ya pasó más tiempo del ciclo promedio
+        de ese sector sin volver a cosecharse — puede estar listo para una nueva ronda.
+      </p>
+      <div class="tablewrap"><table id="tableCiclo"></table></div>
+      <div id="cicloPager" style="display:flex; align-items:center; justify-content:center; gap:12px; padding-top:14px; font-family:var(--font-mono); font-size:12.5px;"></div>
+    </div>
+  </section>
+
   <!-- PAGE 5c: CALIBRES Y PESO DE FRUTO -->
   <section class="page" id="page-calibres">
     <div class="filters">
@@ -242,7 +276,7 @@
     </div>
     <div class="grid2">
       <div class="panel">
-        <h3>Peso promedio (kg) por Lote-Red <span class="tag">todas las fechas</span></h3>
+        <h3 id="chartCalibresPesoTitle">Peso promedio (kg) por Lote-Red <span class="tag">todas las fechas</span></h3>
         <canvas id="chartCalibresPeso"></canvas>
       </div>
       <div class="panel">
@@ -252,7 +286,7 @@
     </div>
     <div class="panel">
       <h3 style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-        <span>Detalle de calibres y peso promedio por Lote-Red y fecha</span>
+        <span id="calibresDetailTitle">Detalle de calibres y peso promedio por Lote-Red y fecha</span>
         <button class="btn btn-ghost" id="exportCalibresBtn" style="font-size:12px; padding:7px 14px;">⬇️&nbsp; Descargar Excel</button>
       </h3>
       <div class="filters" style="margin-top:0;">
@@ -319,12 +353,13 @@
       <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
         Mismo formato del reporte de tareo diario/consolidado: columnas FECHA, CODIGO,
         NOMBRE TRABAJADOR, COD-LAB, NOMBRE LABOR (o NOMBRE DE LABOR). Puedes subir un reporte
-        de un solo día o un consolidado con varios días — las fechas se toman de la columna
-        FECHA de cada fila. <b>Al guardar, esto actualiza solo las fechas presentes en el
-        archivo</b> (se reemplazan esos días puntuales) y conserva el resto de la data de tareo
-        ya guardada — puedes subir un solo día suelto o un consolidado con varios días.
+        de un solo día, un consolidado con varios días, <b>o seleccionar varios archivos a la
+        vez</b> (ej. un mes completo de reportes diarios sueltos) — las fechas se toman de la
+        columna FECHA de cada fila. <b>Al guardar, esto actualiza solo las fechas presentes en
+        los archivos</b> (se reemplazan esos días puntuales) y conserva el resto de la data de
+        tareo ya guardada.
       </p>
-      <input type="file" id="fileTareo" accept=".xlsx,.xls">
+      <input type="file" id="fileTareo" accept=".xlsx,.xls" multiple>
       <label>Excel de Calibres (reporte de pallets/cajas)</label>
       <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
         Mismo formato del reporte de calibres a nivel pallet: columnas F. Cosecha, Lote - Red,
@@ -354,6 +389,45 @@
         sin afectar los datos de palto.
       </p>
       <input type="file" id="fileBalanzaArandano" accept=".xlsx,.xls">
+      <label>Excel de Presupuesto Has/Kg por Lote-Red (Arándano)</label>
+      <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
+        Usa el archivo real de <b>Estimación de Producción por Lote-Red-Variedad</b> (hoja
+        "4-Prod_Lote"), con columnas LOTE, RED, VARIEDAD, AREA y KG TOTAL. Si un Red viene
+        con sub-parcela decimal (ej. 2, 2.1, 2.2) se agrupa automáticamente en el mismo Red
+        entero, y si un mismo Lote-Red-Variedad se repite en varias filas, se suman. Necesario
+        para la vista <b>"Kg Real vs Ppto (x Ha)"</b>. <b>Al guardar, reemplaza por completo</b>
+        el presupuesto guardado.
+      </p>
+      <input type="file" id="fileEstimacionArandano" accept=".xlsx,.xls">
+      <label>Excel de Hectáreas (avance de campo) - Arándano</label>
+      <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
+        Mismo formato que el archivo de avance de campo de Palto: columnas Fecha, Ubicacion,
+        Variedad, TipoCosecha, Ha y Superficie_Ha. Se usa para calcular Ha Selectivo/Barrido y
+        Av. Ha en "Kg Real vs Ppto (x Ha)". <b>Al guardar, reemplaza por completo</b> el avance
+        de campo de Arándano guardado.
+      </p>
+      <input type="file" id="fileHectareasArandano" accept=".xlsx,.xls">
+      <label>Excel de Calibres (reporte de pallets/cajas) - Arándano</label>
+      <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
+        Mismo formato del reporte real: columnas F. Cosecha, Lote - Red (ej. "07-2-AV"),
+        Variedad, Cajas Equi., CAL y CAT. El calibre en Arándano es por milímetro (11mm+ al
+        19mm+, no por N° de fruto/caja como en Palto), y las categorías son I y S/C (sin
+        categoría / mercado nacional) — se descartan filas de DESCARTE, VA y MCDO NACIONAL del
+        cálculo de % por calibre. <b>Al guardar, esto actualiza solo las combinaciones
+        fecha + Lote-Red + Variedad + Categoría presentes en el archivo</b> y conserva el resto
+        del histórico ya guardado.
+      </p>
+      <input type="file" id="fileCalibresArandano" accept=".xlsx,.xls">
+      <label>Excel de Tareo (Personal de Cosecha) - Arándano</label>
+      <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
+        Mismo formato del reporte de tareo diario/consolidado que Palto (columnas FECHA,
+        CODIGO, NOMBRE TRABAJADOR, COD-LAB). Solo se consideran las filas con código de labor
+        <b>5129 (ARA-COSECHADOR)</b>. Puedes subir un solo día, un consolidado con varios días,
+        <b>o seleccionar varios archivos a la vez</b> (ej. un mes completo de reportes diarios
+        sueltos). <b>Al guardar, esto actualiza solo las fechas presentes en los archivos</b> y
+        conserva el resto del histórico de tareo de Arándano ya guardado.
+      </p>
+      <input type="file" id="fileTareoArandano" accept=".xlsx,.xls" multiple>
       </div>
       <div class="actions">
         <button class="btn btn-primary" id="applyUpdate">Guardar y aplicar</button>
@@ -417,6 +491,7 @@
 <script src="js/calculos-bines.js"></script>
 <script src="js/vista-avance.js"></script>
 <script src="js/vista-sectores.js"></script>
+<script src="js/vista-ciclo.js"></script>
 <script src="js/vista-calibres.js"></script>
 <script src="js/vista-cosechadores.js"></script>
 <script src="js/carga-datos.js"></script>

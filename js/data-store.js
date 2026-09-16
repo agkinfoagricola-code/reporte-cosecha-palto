@@ -31,6 +31,13 @@ async function loadStoredData(){
     }
   }catch(e){}
   try{
+    const { data: tareoAraRow } = await sb.from('tareo_arandano_data').select('data, updated_at').eq('id', 1).single();
+    if(tareoAraRow && Array.isArray(tareoAraRow.data) && tareoAraRow.data.length){
+      tareoArandano = tareoAraRow.data;
+      if(tareoAraRow.updated_at) timestamps.push(tareoAraRow.updated_at);
+    }
+  }catch(e){}
+  try{
     const { data: calRow } = await sb.from('calibres_data').select('data, updated_at').eq('id', 1).single();
     if(calRow && Array.isArray(calRow.data) && calRow.data.length){
       calibres = calRow.data;
@@ -42,6 +49,27 @@ async function loadStoredData(){
     if(binesRow && Array.isArray(binesRow.data) && binesRow.data.length){
       bines = binesRow.data;
       if(binesRow.updated_at) timestamps.push(binesRow.updated_at);
+    }
+  }catch(e){}
+  try{
+    const { data: haAraRow } = await sb.from('hectareas_arandano_data').select('data, updated_at').eq('id', 1).single();
+    if(haAraRow && Array.isArray(haAraRow.data) && haAraRow.data.length){
+      hectareasArandano = haAraRow.data;
+      if(haAraRow.updated_at) timestamps.push(haAraRow.updated_at);
+    }
+  }catch(e){}
+  try{
+    const { data: estAraRow } = await sb.from('estimacion_arandano_lotered_data').select('data, updated_at').eq('id', 1).single();
+    if(estAraRow && Array.isArray(estAraRow.data) && estAraRow.data.length){
+      estimacionArandanoLoteRed = estAraRow.data;
+      if(estAraRow.updated_at) timestamps.push(estAraRow.updated_at);
+    }
+  }catch(e){}
+  try{
+    const { data: calAraRow } = await sb.from('calibres_arandano_data').select('data, updated_at').eq('id', 1).single();
+    if(calAraRow && Array.isArray(calAraRow.data) && calAraRow.data.length){
+      calibresArandano = calAraRow.data;
+      if(calAraRow.updated_at) timestamps.push(calAraRow.updated_at);
     }
   }catch(e){}
 

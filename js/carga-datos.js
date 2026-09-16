@@ -138,6 +138,173 @@ function parseBalanzaArandanoRows(rows){
   }).filter(r=>r.lote && r.fecha && r.variedad);
 }
 
+// Lee el Excel de estimación de Arándano tolerando filas de título/versión antes del
+// encabezado real (el archivo de FLM trae "Sociedad Agrícola...", "Versión...", el título del
+// reporte, etc. antes de la fila LOTE/RED/VARIEDAD/AREA/KG TOTAL) — igual que readTareoWorkbook,
+// prueba varios offsets de encabezado en cada hoja hasta encontrar uno reconocible.
+function readEstimacionArandanoWorkbook(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        for(const sheetName of wb.SheetNames){
+          const ws = wb.Sheets[sheetName];
+          for(let range=0; range<=10; range++){
+            const candidate = XLSX.utils.sheet_to_json(ws, {defval:'', range});
+            if(candidate.length && findKey(candidate[0], ['LOTE','Lote']) && findKey(candidate[0], ['RED','Red']) && findKey(candidate[0], ['VARIEDAD','Variedad'])){
+              resolve(candidate);
+              return;
+            }
+          }
+        }
+        reject(new Error('No se encontraron filas de estimación de Arándano reconocibles (revisa que el archivo tenga columnas LOTE, RED, VARIEDAD, AREA, KG TOTAL).'));
+      }catch(err){ reject(new Error('No se pudo leer el archivo Excel: ' + err.message)); }
+    };
+    reader.onerror = ()=> reject(new Error('No se pudo leer el archivo.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Parsea el presupuesto de Has/Kg por Lote-Red-Variedad de Arándano a partir del archivo real
+// "Estimación de Producción por Lote-Red-Variedad" (hoja 4-Prod_Lote): columnas LOTE, RED,
+// VARIEDAD, AREA (Has) y KG TOTAL (Kg Ppto). No existe una data base fija como ESTIMACION de
+// Palto, así que esto se carga por Excel. Es un reemplazo completo (igual que el Excel de
+// Hectáreas de Palto), no un merge por fecha.
+//
+// Dos particularidades de este archivo que hay que resolver acá:
+// 1) RED puede venir con sub-parcela decimal (ej. Lote 7: Red 2, 2.1, 2.2) — para la balanza,
+//    que arma el Red desde el código de referencia de campo, esas tres son el MISMO Red físico
+//    entero (Red 2). Se redondea hacia abajo (Math.floor) y se agrupan.
+// 2) Puede haber más de una fila para el mismo Lote-Red-Variedad (bloques de siembra distintos,
+//    ej. Lote 15 Red 1 Magica aparece dos veces) — se suman, no se sobrescriben.
+// También descarta la fila "SUB TOTAL" y cualquier fila sin Lote/Red numérico.
+function parseEstimacionArandanoLoteRedRows(rows){
+  if(!rows.length) return [];
+  const sample = rows[0];
+  const kLote = findKey(sample, ['LOTE','Lote']);
+  const kRed = findKey(sample, ['RED','Red']);
+  const kVar = findKey(sample, ['VARIEDAD','Variedad']);
+  const kHas = findKey(sample, ['AREA','Area','Has Ppto','HasPpto','Has']);
+  const kKg = findKey(sample, ['KG TOTAL','Kg Total','KgTotal','Kg Ppto','KgPpto','Kg']);
+  if(!kLote || !kRed || !kVar || !kHas || !kKg) throw new Error('Faltan columnas esperadas en el presupuesto de Arándano (LOTE, RED, VARIEDAD, AREA, KG TOTAL).');
+
+  const groups = new Map(); // "lote|red|variedad" -> {lote, red, variedad, has, kgPpto}
+  rows.forEach(r=>{
+    const lote = parseInt(String(r[kLote] ?? '').replace(/[^0-9]/g,''));
+    if(!lote) return; // descarta 'SUB TOTAL', filas vacías, encabezados repetidos, etc.
+    const redNum = parseFloat(r[kRed]);
+    if(isNaN(redNum)) return;
+    const red = 'R' + String(Math.floor(redNum)).padStart(2,'0');
+    const variedad = String(r[kVar] ?? '').trim().toUpperCase();
+    if(!variedad) return;
+    const key = lote+'|'+red+'|'+variedad;
+    if(!groups.has(key)) groups.set(key, { lote, red, variedad, has: 0, kgPpto: 0 });
+    const g = groups.get(key);
+    g.has += parseFloat(r[kHas]) || 0;
+    g.kgPpto += parseFloat(r[kKg]) || 0;
+  });
+  return [...groups.values()];
+}
+
+// Parsea el archivo real de avance de campo de Arándano que reporta el líder (columnas
+// fecRegistro, Ubicacion "L07 R02 S30", VARIEDAD, Hectarea, Cerrado — entre otras que no se
+// usan aquí como Corte12/CorteFinal/Total/falto_Cosechar). A diferencia de Palto, en Arándano
+// el mismo sector se vuelve a cosechar varias veces por campaña (ronda tras ronda, porque el
+// fruto sigue madurando), así que NO hay "avance acumulado" ni tipos de pase (Selectivo/Barrer):
+// una vez que el líder reporta un sector, ese sector queda con su Hectarea completa activa en
+// cosecha — no hay que sumar hectáreas entre fechas ni entre rondas.
+function parseHectareasArandanoRows(rows){
+  if(!rows.length) return [];
+  const sample = rows[0];
+  const kFecha = findKey(sample, ['fecRegistro','Fecha']);
+  const kUbic = findKey(sample, ['Ubicacion','Ubicación']);
+  const kVar = findKey(sample, ['VARIEDAD','Variedad']);
+  const kHa = findKey(sample, ['Hectarea','Hectárea','Ha']);
+  const kCerrado = findKey(sample, ['Cerrado']);
+  if(!kFecha || !kUbic || !kVar || !kHa) throw new Error('Faltan columnas esperadas en el archivo de avance de campo de Arándano (fecRegistro, Ubicacion, VARIEDAD, Hectarea).');
+  return rows.filter(r=>r[kUbic]).map(r=>{
+    const parts = String(r[kUbic]).trim().split(/\s+/);
+    const cerradoRaw = kCerrado ? String(r[kCerrado] ?? '').trim().toLowerCase() : '';
+    return {
+      fecha: formatDateCell(r[kFecha]),
+      lote: parseInt((parts[0]||'').replace(/[^0-9]/g,'')),
+      red: parts[1]||'',
+      sector: parts.slice(2).join(' '),
+      variedad: String(r[kVar]).trim().toUpperCase(),
+      superficie: parseFloat(r[kHa]) || 0,
+      cerrado: cerradoRaw === 'si' || cerradoRaw === 'sí',
+    };
+  }).filter(r=>r.lote && r.red && r.sector);
+}
+
+// Parsea el reporte de calibres de Arándano a nivel pallet/caja (columnas F. Cosecha,
+// Lote - Red "07-2-AV", Variedad, Cajas Equi., CAL, CAT) — mismo formato que el de Palto,
+// pero el calibre es por milímetro (11mm+ al 19mm+) en vez de N° de fruto/caja, así que NO
+// se puede calcular un "peso teórico" como en Palto (4kg ÷ N° calibre no aplica a mm). Por eso
+// esta fila NO trae campo `peso`; el reporte de Arándano solo muestra % de distribución por
+// calibre. CAT trae 'I' (exportable) y 'S/C' (sin categoría / mercado nacional) — ambas se
+// conservan como categorías propias del reporte, a diferencia de Palto que solo usa I/II.
+const CAL_KEYS_ARANDANO = ['11 MM+','12 MM+','14 MM+','16 MM+','18 MM+','19 MM+'];
+const CATEGORIAS_VALIDAS_ARANDANO = new Set(['I','II','S/C']);
+
+function parseCalibresArandanoRawRows(rows){
+  if(!rows.length) return [];
+  const sample = rows[0];
+  const kFecha = findKey(sample, ['F. Cosecha','F Cosecha','Fecha Cosecha']);
+  const kLoteRed = findKey(sample, ['Lote - Red','Lote-Red','LoteRed']);
+  const kVar = findKey(sample, ['Variedad']);
+  const kCajas = findKey(sample, ['Cajas Equi.','Cajas Equi','CajasEqui']);
+  const kCal = findKey(sample, ['CAL']);
+  const kCat = findKey(sample, ['CAT']);
+  if(!kFecha || !kLoteRed || !kVar || !kCajas || !kCal || !kCat) throw new Error('Faltan columnas esperadas en el archivo de calibres de Arándano (F. Cosecha, Lote - Red, Variedad, Cajas Equi., CAL, CAT).');
+
+  const groups = new Map(); // "fecha|lote-red|variedad|categoria" -> {cajasPorCal, total}
+  rows.forEach(r=>{
+    if(!r[kLoteRed]) return;
+    const cat = String(r[kCat] ?? '').trim().toUpperCase();
+    if(!CATEGORIAS_VALIDAS_ARANDANO.has(cat)) return;
+    const calRaw = String(r[kCal] ?? '').trim().toUpperCase();
+    if(!CAL_KEYS_ARANDANO.includes(calRaw)) return; // descarta DESCARTE, VA, MCDO NACIONAL
+
+    // "07-2-AV" -> Lote 7, Red R02 (mismo criterio que la balanza de Arándano); se arma un
+    // Lote-Red "limpio" (ej. "7-R02") en vez de guardar el string crudo, porque el crudo trae
+    // el código de variedad pegado al final (AV, AE, AA...) y rompería el filtro de Lote/Red.
+    const partes = String(r[kLoteRed]).trim().split('-');
+    const lote = parseInt(partes[0], 10);
+    const redNum = partes[1] ? parseInt(partes[1].replace(/[^0-9]/g,''), 10) : NaN;
+    if(!lote || isNaN(redNum)) return;
+    const loteRed = lote + '-R' + String(redNum).padStart(2,'0');
+
+    const cajas = parseFloat(r[kCajas]) || 0;
+    const variedad = String(r[kVar] ?? '').replace(/^ARANDANO\s+/i,'').trim().toUpperCase();
+    const key = formatDateCell(r[kFecha]) + '|' + loteRed + '|' + variedad + '|' + cat;
+    if(!groups.has(key)) groups.set(key, { cajasPorCal: {}, total: 0 });
+    const g = groups.get(key);
+    g.cajasPorCal[calRaw] = (g.cajasPorCal[calRaw] || 0) + cajas;
+    g.total += cajas;
+  });
+
+  const out = [];
+  groups.forEach((g, key)=>{
+    const [fecha, loteRed, variedad, categoria] = key.split('|');
+    const cal = {};
+    CAL_KEYS_ARANDANO.forEach(k=>{ cal[k] = g.total > 0 ? (g.cajasPorCal[k] || 0) / g.total : 0; });
+    out.push({ fecha, loteRed, variedad, categoria, cajas: g.total, cal });
+  });
+  return out;
+}
+
+// Reemplaza en `calibresArandano` solo las combinaciones (fecha, Lote-Red, Variedad, Categoría)
+// presentes en `newRows`, igual que con el de Palto.
+function mergeCalibresArandanoByKey(existingRows, newRows){
+  const keyOf = r => r.fecha+'|'+r.loteRed+'|'+r.variedad+'|'+(r.categoria||'I');
+  const newKeys = new Set(newRows.map(keyOf));
+  const kept = existingRows.filter(r=>!newKeys.has(keyOf(r)));
+  return kept.concat(newRows);
+}
+
 function parseHectareasRows(rows){
   if(!rows.length) return [];
   const sample = rows[0];
@@ -165,6 +332,32 @@ function parseHectareasRows(rows){
       cerrado: cerradoRaw === 'si' || cerradoRaw === 'sí',
     };
   });
+}
+
+// Parsea el reporte de tareo de Arándano — mismo formato que el de Palto (FECHA, CODIGO,
+// NOMBRE TRABAJADOR, COD-LAB, HRS.TRAB.), pero solo conserva el código de cosecha de Arándano
+// (ver TAREO_COSECHADOR_CODES_ARANDANO = 5129 ARA-COSECHADOR), que es uno solo — a diferencia
+// de Palto no hay split Hass/Poli por variedad.
+function parseTareoArandanoRows(rows){
+  if(!rows.length) return [];
+  const sample = rows[0];
+  const kFecha = findKey(sample, ['FECHA','Fecha']);
+  const kCodigo = findKey(sample, ['CODIGO','Codigo']);
+  const kCodLab = findKey(sample, ['COD-LAB','COD LAB','CodLab']);
+  const kHoras = findKey(sample, ['HRS.TRAB.','HRS TRAB','HRS.TRAB','Horas']);
+  if(!kFecha || !kCodigo || !kCodLab) throw new Error('Faltan columnas esperadas en el archivo de tareo de Arándano (FECHA, CODIGO, COD-LAB).');
+  const out = [];
+  for(const r of rows){
+    if(r[kCodigo] === '' || r[kCodigo] == null) continue;
+    const codlab = parseInt(String(r[kCodLab]).replace(/[^0-9]/g,''));
+    if(!TAREO_COSECHADOR_CODES_ARANDANO.has(codlab)) continue;
+    const codigo = parseInt(String(r[kCodigo]).replace(/[^0-9]/g,''));
+    if(!codigo) continue;
+    let horas = kHoras ? parseFloat(r[kHoras]) : NaN;
+    if(isNaN(horas)) horas = 8;
+    out.push({ fecha: formatDateCell(r[kFecha]), codigo, codlab, horas });
+  }
+  return out;
 }
 
 // Parsea el reporte de tareo (uno o varios días) al formato interno {fecha, codigo, codlab}.
@@ -311,11 +504,15 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   }
   const fileBal = document.getElementById('fileBalanza').files[0];
   const fileBalAra = document.getElementById('fileBalanzaArandano').files[0];
+  const fileEstAra = document.getElementById('fileEstimacionArandano').files[0];
+  const fileHaAra = document.getElementById('fileHectareasArandano').files[0];
+  const fileCalAra = document.getElementById('fileCalibresArandano').files[0];
+  const fileTareoAraList = [...document.getElementById('fileTareoArandano').files];
   const fileHa = document.getElementById('fileHectareas').files[0];
-  const fileTareo = document.getElementById('fileTareo').files[0];
+  const fileTareoList = [...document.getElementById('fileTareo').files];
   const fileCal = document.getElementById('fileCalibres').files[0];
   const fileBines = document.getElementById('fileBines').files[0];
-  if(!fileBal && !fileBalAra && !fileHa && !fileTareo && !fileCal && !fileBines){
+  if(!fileBal && !fileBalAra && !fileEstAra && !fileHaAra && !fileCalAra && !fileTareoAraList.length && !fileHa && !fileTareoList.length && !fileCal && !fileBines){
     statusEl.className='status-msg err'; statusEl.textContent='Selecciona al menos un archivo Excel para actualizar.'; return;
   }
   statusEl.className='status-msg'; statusEl.textContent='Leyendo archivo(s)…';
@@ -338,6 +535,44 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
       balanzaArandano = parsed;
       if(cultivoActivo === 'arandano') balanza = balanzaArandano;
     }
+    if(fileEstAra){
+      const rows = await readEstimacionArandanoWorkbook(fileEstAra);
+      const parsed = parseEstimacionArandanoLoteRedRows(rows);
+      if(!parsed.length) throw new Error('El Excel de presupuesto de Arándano no tiene filas válidas.');
+      const { error } = await sb.from('estimacion_arandano_lotered_data').update({ data: parsed, updated_by: currentUser.email }).eq('id', 1);
+      if(error) throw new Error(error.message);
+      estimacionArandanoLoteRed = parsed;
+    }
+    if(fileHaAra){
+      const rows = await readExcelFile(fileHaAra);
+      const parsed = parseHectareasArandanoRows(rows);
+      if(!parsed.length) throw new Error('El Excel de avance de campo de Arándano no tiene filas válidas.');
+      const { error } = await sb.from('hectareas_arandano_data').update({ data: parsed, updated_by: currentUser.email }).eq('id', 1);
+      if(error) throw new Error(error.message);
+      hectareasArandano = parsed;
+    }
+    if(fileCalAra){
+      const rows = await readExcelFile(fileCalAra);
+      const parsed = parseCalibresArandanoRawRows(rows);
+      if(!parsed.length) throw new Error('El Excel de calibres de Arándano no tiene filas válidas.');
+      const merged = mergeCalibresArandanoByKey(calibresArandano, parsed);
+      const { error } = await sb.from('calibres_arandano_data').update({ data: merged, updated_by: currentUser.email }).eq('id', 1);
+      if(error) throw new Error(error.message);
+      calibresArandano = merged;
+    }
+    if(fileTareoAraList.length){
+      let rows = [];
+      for(let i=0; i<fileTareoAraList.length; i++){
+        statusEl.textContent = `Leyendo tareo Arándano (${i+1} de ${fileTareoAraList.length})…`;
+        rows = rows.concat(await readTareoWorkbook(fileTareoAraList[i]));
+      }
+      const parsed = parseTareoArandanoRows(rows);
+      if(!parsed.length) throw new Error('El/los Excel de tareo de Arándano no tienen filas válidas para el código 5129 (ARA-COSECHADOR).');
+      const merged = mergeTareoByDate(tareoArandano, parsed);
+      const { error } = await sb.from('tareo_arandano_data').update({ data: merged, updated_by: currentUser.email }).eq('id', 1);
+      if(error) throw new Error(error.message);
+      tareoArandano = merged;
+    }
     if(fileHa){
       const rows = await readExcelFile(fileHa);
       const parsed = parseHectareasRows(rows);
@@ -346,10 +581,14 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
       if(error) throw new Error(error.message);
       hectareas = parsed;
     }
-    if(fileTareo){
-      const rows = await readTareoWorkbook(fileTareo);
+    if(fileTareoList.length){
+      let rows = [];
+      for(let i=0; i<fileTareoList.length; i++){
+        statusEl.textContent = `Leyendo tareo (${i+1} de ${fileTareoList.length})…`;
+        rows = rows.concat(await readTareoWorkbook(fileTareoList[i]));
+      }
       const parsed = parseTareoRows(rows);
-      if(!parsed.length) throw new Error('El Excel de tareo no tiene filas válidas de jornales/tacheros.');
+      if(!parsed.length) throw new Error('El/los Excel de tareo no tienen filas válidas de jornales/tacheros.');
       const merged = mergeTareoByDate(tareo, parsed);
       const { error } = await sb.from('tareo_data').update({ data: merged, updated_by: currentUser.email }).eq('id', 1);
       if(error) throw new Error(error.message);
@@ -378,6 +617,10 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
     statusEl.className='status-msg ok'; statusEl.textContent='Datos guardados y aplicados para todos los usuarios.';
     document.getElementById('fileBalanza').value = '';
     document.getElementById('fileBalanzaArandano').value = '';
+    document.getElementById('fileEstimacionArandano').value = '';
+    document.getElementById('fileHectareasArandano').value = '';
+    document.getElementById('fileCalibresArandano').value = '';
+    document.getElementById('fileTareoArandano').value = '';
     document.getElementById('fileHectareas').value = '';
     document.getElementById('fileTareo').value = '';
     document.getElementById('fileCalibres').value = '';

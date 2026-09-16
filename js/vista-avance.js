@@ -2,6 +2,7 @@
 let lastAvanceData = null; // {rows:[...], totals:{...}} — usado también para exportar a Excel
 
 function renderAvance(){
+  if(cultivoActivo === 'arandano'){ renderAvanceArandano(); return; }
   // Filtro de Lote específico de esta tabla.
   const selLote4 = document.getElementById('f4-lote');
   const lotesAvance = uniq(ESTIMACION.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b));
@@ -84,6 +85,95 @@ function renderAvance(){
   };
 }
 
+// Variante de renderAvance() para Arándano: misma tabla y mismas columnas, pero usando
+// `hectareasArandano` (avance de campo) y `estimacionArandanoLoteRed` (presupuesto de Has/Kg
+// por Lote-Red-Variedad) en vez de los datasets de Palto — ambos cargados por Excel desde
+// "Carga de Datos" porque, a diferencia de Palto, no hay una data base fija para Arándano.
+function renderAvanceArandano(){
+  const selLote4 = document.getElementById('f4-lote');
+  const lotesAvance = uniq(estimacionArandanoLoteRed.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b));
+  const prevLote4 = selLote4.value;
+  selLote4.innerHTML = '<option value="">Todos los lotes</option>' + lotesAvance.map(l=>`<option value="${l}">Lote ${l}</option>`).join('');
+  if(lotesAvance.map(String).includes(prevLote4)) selLote4.value = prevLote4;
+
+  let thead = `<tr><th>Lote</th><th>Red</th><th class="num">Has Ppto</th>
+    <th class="num">Av. Ha</th>
+    <th class="num">Kg Total Ppto</th><th class="num">Kg Total Real</th><th>% Cumpl. Kg Total</th>
+    <th class="num">Kg/Ha Ppto</th><th class="num">Kg/Ha Real</th><th class="num">Var. Kg/Ha</th><th>Kg/Ha Ppto vs Kg/Ha Real</th></tr>`;
+
+  const fLote4 = document.getElementById('f4-lote').value;
+  const agg = computeEstimacionArandanoAgregado(activeVariedades);
+  const avanceMap = computeAvanceArandanoPorLoteRed(hectareasArandano);
+
+  const rows = [...agg.values()]
+    .filter(e => !fLote4 || String(e.lote)===String(fLote4))
+    .sort((a,b)=> Number(a.lote)-Number(b.lote) || String(a.red).localeCompare(String(b.red)));
+
+  let totHas=0, totKgP=0, totAvHa=0, totKgR=0, totBarrido=0, totSelectivo=0;
+  const dataRows = [];
+  const rowsHtml = rows.map(e=>{
+    const balRows = balanza.filter(b=> b.lote==e.lote && b.red==e.red && matchVariedad(b.variedad));
+    const kgReal = balRows.reduce((s,r)=>s+r.kg,0);
+    const kgxhaPpto = e.has>0 ? e.kgPpto/e.has : 0;
+    const kgTotalPpto = e.kgPpto;
+
+    const key = e.lote+'-'+e.red;
+    const haSelectivo = 0; // no aplica a Arándano (no hay pase "selectivo" separado)
+    // Av. Ha: hectáreas reportadas por el líder para este Lote-Red (ver computeAvanceArandanoPorLoteRed),
+    // capadas al Has Ppto por si el líder reportó más área de la presupuestada.
+    const haBarrido = Math.min(avanceMap.get(key) || 0, e.has || Infinity);
+    const avHa = haBarrido;
+    const kgxhaReal = avHa>0 ? kgReal/avHa : 0;
+    const ratio = kgxhaPpto>0 ? kgxhaReal/kgxhaPpto : 0;
+    const ratioKg = kgTotalPpto>0 ? kgReal/kgTotalPpto : 0;
+    const cerrado = e.has>0 && avHa >= e.has - 0.05;
+
+    totHas+=e.has; totKgP+=kgTotalPpto; totAvHa+=avHa; totKgR+=kgReal;
+    totBarrido+=haBarrido; totSelectivo+=haSelectivo;
+
+    dataRows.push({
+      lote: e.lote, red: e.red, hasPpto: e.has, haSelectivo, haBarrido, avHa,
+      kgxhaPpto, kgTotalPpto, kgReal, kgxhaReal, varKgHa: kgxhaReal - kgxhaPpto,
+      estadoPct: ratio, cumplKgPct: ratioKg, cerrado
+    });
+
+    return `<tr${cerrado ? ' style="background:#E3F1E6;"' : ''}><td>${e.lote}</td><td>${e.red}</td><td class="num">${fmt1(e.has)}</td>
+      <td class="num">${fmt1(avHa)}${cerrado ? ' ✅' : ''}</td>
+      <td class="num">${fmt(kgTotalPpto)}</td><td class="num">${fmt(kgReal)}</td><td>${estadoPillKg(ratioKg)}</td>
+      <td class="num">${fmt(kgxhaPpto)}</td><td class="num">${fmt(kgxhaReal)}</td><td class="num">${fmt(kgxhaReal - kgxhaPpto)}</td><td>${estadoPill(ratio)}</td></tr>`;
+  }).join('');
+
+  const totKgxHaPpto = totHas>0 ? totKgP/totHas : 0;
+  const totKgxHaReal = totAvHa>0 ? totKgR/totAvHa : 0;
+  const totRatio = totKgxHaPpto>0 ? totKgxHaReal/totKgxHaPpto : 0;
+  const totRatioKg = totKgP>0 ? totKgR/totKgP : 0;
+  const totRow = `<tr style="background:#EEF3EE; position:sticky; top:29px; z-index:1;"><td><b>Total / Prom.</b></td><td></td><td class="num"><b>${fmt1(totHas)}</b></td>
+    <td class="num"><b>${fmt1(totAvHa)}</b></td>
+    <td class="num"><b>${fmt(totKgP)}</b></td><td class="num"><b>${fmt(totKgR)}</b></td><td><b>${estadoPillKg(totRatioKg)}</b></td>
+    <td class="num"><b>${fmt(totKgxHaPpto)}</b></td><td class="num"><b>${fmt(totKgxHaReal)}</b></td><td class="num"><b>${fmt(totKgxHaReal-totKgxHaPpto)}</b></td>
+    <td><b>${estadoPill(totRatio)}</b></td></tr>`;
+
+  document.getElementById('tableAvance').innerHTML = thead + totRow + rowsHtml;
+
+  if(!rows.length){
+    document.getElementById('tableAvance').innerHTML = thead +
+      `<tr><td colspan="11" style="text-align:center; color:#8a8f83; padding:24px;">
+        Aún no se ha cargado el presupuesto de Has/Kg por Lote-Red de Arándano.
+        Súbelo desde "Carga de Datos".
+      </td></tr>`;
+  }
+
+  lastAvanceData = {
+    rows: dataRows,
+    totals: {
+      hasPpto: totHas, haSelectivo: totSelectivo, haBarrido: totBarrido, avHa: totAvHa,
+      kgxhaPpto: totKgxHaPpto, kgTotalPpto: totKgP, kgReal: totKgR,
+      kgxhaReal: totKgxHaReal, varKgHa: totKgxHaReal - totKgxHaPpto, estadoPct: totRatio,
+      cumplKgPct: totRatioKg
+    }
+  };
+}
+
 // Exporta la tabla "Kg/ha real vs ppto por Lote-Red" a un archivo .xlsx, respetando
 // el filtro global de Variedad activo en el momento de la descarga.
 function exportAvanceToExcel(){
@@ -91,25 +181,28 @@ function exportAvanceToExcel(){
     alert('No hay datos para exportar todavía.');
     return;
   }
-  const headers = ['Lote','Red','Has Ppto','Ha Selectivo','Ha Barrido/DS','Av. Ha',
-    'Kg Total Ppto','Kg Total Real','% Cumpl. Kg Total','Kg/Ha Ppto','Kg/Ha Real','Var. Kg/Ha','Kg/Ha Ppto vs Kg/Ha Real','Cerrado'];
+  const esAra = cultivoActivo === 'arandano';
+  const headers = esAra
+    ? ['Lote','Red','Has Ppto','Av. Ha','Kg Total Ppto','Kg Total Real','% Cumpl. Kg Total','Kg/Ha Ppto','Kg/Ha Real','Var. Kg/Ha','Kg/Ha Ppto vs Kg/Ha Real','Cerrado']
+    : ['Lote','Red','Has Ppto','Ha Selectivo','Ha Barrido/DS','Av. Ha','Kg Total Ppto','Kg Total Real','% Cumpl. Kg Total','Kg/Ha Ppto','Kg/Ha Real','Var. Kg/Ha','Kg/Ha Ppto vs Kg/Ha Real','Cerrado'];
   const aoa = [headers];
   lastAvanceData.rows.forEach(r=>{
-    aoa.push([
-      r.lote, r.red,
-      round1(r.hasPpto), round1(r.haSelectivo), round1(r.haBarrido), round1(r.avHa),
-      Math.round(r.kgTotalPpto), Math.round(r.kgReal), round1(r.cumplKgPct*100),
-      Math.round(r.kgxhaPpto), Math.round(r.kgxhaReal), Math.round(r.varKgHa), round1(r.estadoPct*100),
-      r.cerrado ? 'Sí' : 'No'
-    ]);
+    const fila = esAra
+      ? [r.lote, r.red, round1(r.hasPpto), round1(r.avHa), Math.round(r.kgTotalPpto), Math.round(r.kgReal), round1(r.cumplKgPct*100),
+         Math.round(r.kgxhaPpto), Math.round(r.kgxhaReal), Math.round(r.varKgHa), round1(r.estadoPct*100), r.cerrado ? 'Sí' : 'No']
+      : [r.lote, r.red, round1(r.hasPpto), round1(r.haSelectivo), round1(r.haBarrido), round1(r.avHa),
+         Math.round(r.kgTotalPpto), Math.round(r.kgReal), round1(r.cumplKgPct*100),
+         Math.round(r.kgxhaPpto), Math.round(r.kgxhaReal), Math.round(r.varKgHa), round1(r.estadoPct*100), r.cerrado ? 'Sí' : 'No'];
+    aoa.push(fila);
   });
   const t = lastAvanceData.totals;
-  aoa.push([
-    'Total / Prom.', '',
-    round1(t.hasPpto), round1(t.haSelectivo), round1(t.haBarrido), round1(t.avHa),
-    Math.round(t.kgTotalPpto), Math.round(t.kgReal), round1(t.cumplKgPct*100),
-    Math.round(t.kgxhaPpto), Math.round(t.kgxhaReal), Math.round(t.varKgHa), round1(t.estadoPct*100), ''
-  ]);
+  aoa.push(esAra
+    ? ['Total / Prom.', '', round1(t.hasPpto), round1(t.avHa), Math.round(t.kgTotalPpto), Math.round(t.kgReal), round1(t.cumplKgPct*100),
+       Math.round(t.kgxhaPpto), Math.round(t.kgxhaReal), Math.round(t.varKgHa), round1(t.estadoPct*100), '']
+    : ['Total / Prom.', '', round1(t.hasPpto), round1(t.haSelectivo), round1(t.haBarrido), round1(t.avHa),
+       Math.round(t.kgTotalPpto), Math.round(t.kgReal), round1(t.cumplKgPct*100),
+       Math.round(t.kgxhaPpto), Math.round(t.kgxhaReal), Math.round(t.varKgHa), round1(t.estadoPct*100), '']
+  );
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = headers.map((h,i)=> i===0 ? {wch:8} : {wch: Math.max(h.length+2, 11)});
