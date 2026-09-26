@@ -44,6 +44,18 @@ function matchVariedad(v){
   return activeVariedades.length === 0 || activeVariedades.includes(v);
 }
 
+// Filtro de variedad para indicadores Kg / Jornal de Palto. El tareo no separa Ettinger de
+// Zutano: 3052 (JORNALES COSECHA) es Hass y 3180 (JORNALES COSECHA POLI) es Ettinger + Zutano.
+// Por eso, si se filtra Ettinger o Zutano, los kg que se comparan contra los jornales 3180 son
+// los de ambos polinizantes juntos (si no, Ettinger solo quedaría dividido entre todos los
+// jornales Poli y el ratio saldría subestimado). En Arándano se comporta igual que matchVariedad.
+function matchVariedadKgJornal(v){
+  if(cultivoActivo !== 'palto' || activeVariedades.length === 0) return matchVariedad(v);
+  if(activeVariedades.includes('HASS') && v === 'HASS') return true;
+  const poli = activeVariedades.includes('ETTINGER') || activeVariedades.includes('ZUTANO');
+  return poli && (v === 'ETTINGER' || v === 'ZUTANO');
+}
+
 function kgPptoVariedad(e, sel){
   // sel puede ser un array (nueva multi-selección) o un string (compatibilidad)
   const arr = Array.isArray(sel) ? sel : (sel ? [sel] : []);

@@ -84,6 +84,7 @@
         <button data-page="ciclo" id="navCicloBtn" style="display:none;">Días de Ciclo</button>
         <button data-page="calibres" id="navCalibresBtn">Calibres y Peso Fruto</button>
         <button data-page="cosechadores">Kg. / Cosechador</button>
+        <button data-page="kgjornal">Kg / Jornal por Lote</button>
       </div>
       <button class="nav-item" data-page="actualizar" id="navActualizar" style="display:none;">⬆️&nbsp; Carga de Datos</button>
       <button class="nav-item" data-page="usuarios" id="navUsuarios" style="display:none;">👤&nbsp; Usuarios</button>
@@ -336,6 +337,41 @@
     </div>
   </section>
 
+  <!-- PAGE 5c: KG / JORNAL POR LOTE (CECO) — solo Palto -->
+  <section class="page" id="page-kgjornal">
+    <div class="panel" id="kgjAviso" style="display:none; border-left:4px solid var(--rojo); font-size:13px; line-height:1.5;"></div>
+    <div class="panel">
+      <div class="filters" style="margin-top:0;">
+        <div class="gf-buttons" id="f8-metrica">
+          <button type="button" data-m="kgjor" class="active">Kg / Jornal</button>
+          <button type="button" data-m="kg">Kg cosechados</button>
+          <button type="button" data-m="jor">Jornales</button>
+          <button type="button" data-m="kgha">Kg / Ha</button>
+          <button type="button" data-m="jorha">Jornales / Ha</button>
+        </div>
+        <button type="button" class="btn btn-ghost" id="kgjDescargarMatriz" style="margin-left:auto; font-size:12.5px; padding:7px 14px;">⬇️ Descargar Excel</button>
+      </div>
+      <h3 id="kgjMatrizTitulo">Kg / Jornal por CECO y semana</h3>
+      <div class="tablewrap"><table id="tableKgJornalMatriz"></table></div>
+    </div>
+    <div class="panel">
+      <h3>Total Palto por semana</h3>
+      <canvas id="chartKgJornalSemana"></canvas>
+    </div>
+    <div class="panel">
+      <h3 id="kgjDetalleTitulo">Detalle por semana y CECO</h3>
+      <div class="filters" style="margin-top:0; align-items:center;">
+        <div class="gf-buttons" id="f8-detalleModo">
+          <button type="button" data-modo="semana" class="active">Por semana</button>
+          <button type="button" data-modo="dia">Por día</button>
+        </div>
+        <select id="f8-ceco" title="CECO"></select>
+        <button type="button" class="btn btn-ghost" id="kgjDescargarDetalle" style="margin-left:auto; font-size:12.5px; padding:7px 14px;">⬇️ Descargar Excel</button>
+      </div>
+      <div class="tablewrap"><table id="tableKgJornalDetalle"></table></div>
+    </div>
+  </section>
+
   <!-- PAGE 6: ACTUALIZAR DATOS (solo admin) -->
   <section class="page" id="page-actualizar">
     <div class="panel form-card">
@@ -352,14 +388,21 @@
       <label>Excel de Tareo (personal de cosecha)</label>
       <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
         Mismo formato del reporte de tareo diario/consolidado: columnas FECHA, CODIGO,
-        NOMBRE TRABAJADOR, COD-LAB, NOMBRE LABOR (o NOMBRE DE LABOR). Puedes subir un reporte
+        NOMBRE TRABAJADOR, COD-LAB, NOMBRE LABOR (o NOMBRE DE LABOR), y COD-LT/UBI (lote/ubicación
+        del trabajador, necesario para el indicador Kg / Jornal por Lote). Puedes subir un reporte
         de un solo día, un consolidado con varios días, <b>o seleccionar varios archivos a la
         vez</b> (ej. un mes completo de reportes diarios sueltos) — las fechas se toman de la
         columna FECHA de cada fila. <b>Al guardar, esto actualiza solo las fechas presentes en
         los archivos</b> (se reemplazan esos días puntuales) y conserva el resto de la data de
         tareo ya guardada.
       </p>
-      <input type="file" id="fileTareo" accept=".xlsx,.xls" multiple>
+      <div id="tareoDropzone" style="border:1.5px dashed var(--linea); border-radius:8px; padding:10px 12px; margin-bottom:6px; background:#fff;">
+        <input type="file" id="fileTareo" accept=".xlsx,.xls" multiple>
+        <p style="font-size:12px; color:#555; margin:6px 0 0 0;">
+          Puedes elegir archivos varias veces o arrastrarlos aquí: se van sumando a la lista.
+        </p>
+        <div id="tareoQueue" style="font-size:12.5px; margin-top:6px;"></div>
+      </div>
       <label>Excel de Calibres (reporte de pallets/cajas)</label>
       <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
         Mismo formato del reporte de calibres a nivel pallet: columnas F. Cosecha, Lote - Red,
@@ -494,6 +537,7 @@
 <script src="js/vista-ciclo.js"></script>
 <script src="js/vista-calibres.js"></script>
 <script src="js/vista-cosechadores.js"></script>
+<script src="js/vista-kg-jornal-lote.js"></script>
 <script src="js/carga-datos.js"></script>
 <script src="js/app.js"></script>
 <script src="js/auth.js"></script>

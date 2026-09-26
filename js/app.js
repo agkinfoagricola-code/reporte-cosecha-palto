@@ -11,6 +11,7 @@ function renderAll(){
   populateCalibresFilters();
   renderCalibres();
   renderCosechadores();
+  renderKgJornalLote();
   if(cultivoActivo === 'arandano'){ populateCicloFilters(); renderCiclo(); return; }
   renderInicio();
 }
@@ -61,6 +62,7 @@ const PAGE_TITLES = {
   sectores: 'Detalle Sectores',
   calibres: 'Calibres y Peso Fruto',
   cosechadores: 'Kg. / Cosechador',
+  kgjornal: 'Kg / Jornal por Lote (CECO)',
   ciclo: 'Días de Ciclo',
   actualizar: 'Carga de Datos',
   usuarios: 'Usuarios'

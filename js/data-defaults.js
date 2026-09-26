@@ -15,6 +15,40 @@ const TAREO_POLINIZANTE_CODES = new Set([3180]);
 const TAREO_COSECHADOR_CODES = new Set([...TAREO_HASS_CODES, ...TAREO_POLINIZANTE_CODES]);
 // Arándano usa un único código de cosecha (no hay split por variedad como en Palto).
 const TAREO_COSECHADOR_CODES_ARANDANO = new Set([5129]); // 5129 = ARA-COSECHADOR
+
+/* ============ CECOs DE PALTO (indicador Kg / Jornal por lote) ============
+   Unidades de costo usadas para el indicador semanal Kg / Jornal. Cada CECO agrupa los
+   códigos de Lote/Ubicación del tareo (columna COD-LT/UBI, según la "Plancha de lotes y
+   ubicaciones - Palto" de RR.HH.). Lote 12 – Red 3.2 y Lote 16 – Red 4.2 tienen CECO propio
+   (código de ubicación 3403 y 3404); del lado de la balanza se identifican por la red R32 y R42. */
+const CECOS_PALTO = [
+  { ceco:'Lote 1',            sap:'12512301', ha:120.17, ubis:[3268,3269,3392] },
+  { ceco:'Lote 2',            sap:'12512302', ha:101.77, ubis:[3271,3272] },
+  { ceco:'Lote 3',            sap:'12512303', ha:167.75, ubis:[3273,3274,3398] },
+  { ceco:'Lote 4',            sap:'12512304', ha:134.53, ubis:[3393,3399,3400] },
+  { ceco:'Lote 6',            sap:'12512305', ha:86.83,  ubis:[3279,3280] },
+  { ceco:'Lote 7',            sap:'12512306', ha:9.82,   ubis:[3330] },
+  { ceco:'Lote 9',            sap:'12512307', ha:140.40, ubis:[3405,3406,3395] },
+  { ceco:'Lote 11',           sap:'12512308', ha:215.30, ubis:[3208,3286,3209,3210,3211,3284,3285] },
+  { ceco:'Lote 12',           sap:'12512309', ha:91.59,  ubis:[3219,3288,3289] },
+  { ceco:'Lote 12 – Red 3.2', sap:'12512310', ha:15.29,  ubis:[3403] },
+  { ceco:'Lote 16',           sap:'12512311', ha:109.73, ubis:[3291,3292,3294,3295] },
+  { ceco:'Lote 16 – Red 4.2', sap:'12512312', ha:26.87,  ubis:[3404] },
+];
+const UBI_A_CECO_PALTO = new Map(CECOS_PALTO.flatMap(c => c.ubis.map(u => [u, c.ceco])));
+const CECO_PALTO_NOMBRES = new Set(CECOS_PALTO.map(c => c.ceco));
+
+// Balanza (lote numérico + red "R01", "R32", ...) -> nombre de CECO, o null si el lote no está
+// en la lista de CECOs de Palto.
+function cecoPaltoDesdeBalanza(lote, red){
+  const l = parseInt(lote, 10);
+  const r = String(red || '').trim().toUpperCase();
+  if(l === 12 && r === 'R32') return 'Lote 12 – Red 3.2';
+  if(l === 16 && r === 'R42') return 'Lote 16 – Red 4.2';
+  const nombre = 'Lote ' + l;
+  return CECO_PALTO_NOMBRES.has(nombre) ? nombre : null;
+}
+
 let charts = {};
 let currentUser = null;
 let currentRole = 'viewer';

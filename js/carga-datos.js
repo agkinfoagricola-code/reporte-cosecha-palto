@@ -370,6 +370,11 @@ function parseTareoRows(rows){
   const kCodigo = findKey(sample, ['CODIGO','Codigo']);
   const kCodLab = findKey(sample, ['COD-LAB','COD LAB','CodLab']);
   const kHoras = findKey(sample, ['HRS.TRAB.','HRS TRAB','HRS.TRAB','Horas']);
+  // Lote/ubicación del trabajador (código numérico de la plancha de RR.HH., ej. 3268, 3403) y
+  // cuadrilla (columna TACHERO, ej. "C029"). Se guardan para el indicador Kg / Jornal por
+  // lote (CECO). Son opcionales: si el archivo no las trae, la fila se guarda igual que antes.
+  const kCodLote = findKey(sample, ['COD-LT/UBI','COD LT/UBI','COD-LOTE/UBI','Cod-Lote/Ubi','COD-LT','CODLOTE']);
+  const kCuadrilla = findKey(sample, ['TACHERO','GRUPO','GPO']);
   if(!kFecha || !kCodigo || !kCodLab) throw new Error('Faltan columnas esperadas en el archivo de tareo (FECHA, CODIGO, COD-LAB).');
   const out = [];
   for(const r of rows){
@@ -380,7 +385,16 @@ function parseTareoRows(rows){
     if(!codigo) continue;
     let horas = kHoras ? parseFloat(r[kHoras]) : NaN;
     if(isNaN(horas)) horas = 8;
-    out.push({ fecha: formatDateCell(r[kFecha]), codigo, codlab, horas });
+    const fila = { fecha: formatDateCell(r[kFecha]), codigo, codlab, horas };
+    if(kCodLote){
+      const codlote = parseInt(String(r[kCodLote]).replace(/[^0-9]/g,''));
+      if(codlote) fila.codlote = codlote;
+    }
+    if(kCuadrilla){
+      const cuadrilla = String(r[kCuadrilla] ?? '').trim();
+      if(cuadrilla) fila.cuadrilla = cuadrilla;
+    }
+    out.push(fila);
   }
   return out;
 }
@@ -495,6 +509,59 @@ function mergeBinesByDate(existingRows, newRows){
   return kept.concat(newRows);
 }
 
+
+/* ============ COLA DE ARCHIVOS DE TAREO (Palto) ============
+   El input de archivo reemplaza la selección cada vez que se abre, así que los archivos se
+   acumulan en esta lista: se pueden elegir en varias tandas (de distintas carpetas) o
+   arrastrarlos al recuadro. Se ignoran repetidos (mismo nombre, tamaño y fecha). */
+let tareoCola = [];
+let tareoOmitidos = []; // archivos de la última carga que no se pudieron leer
+
+function agregarATareoCola(files){
+  const clave = f => f.name + '|' + f.size + '|' + f.lastModified;
+  const existentes = new Set(tareoCola.map(clave));
+  for(const f of files){
+    if(!/\.xlsx?$/i.test(f.name)) continue;
+    if(existentes.has(clave(f))) continue;
+    tareoCola.push(f); existentes.add(clave(f));
+  }
+  tareoCola.sort((a,b)=> a.name.localeCompare(b.name, 'es', {numeric:true}));
+  renderTareoCola();
+}
+
+function renderTareoCola(){
+  const el = document.getElementById('tareoQueue');
+  if(!el) return;
+  if(!tareoCola.length){ el.innerHTML = '<span style="color:#8a8f83;">Ningún archivo en la lista.</span>'; return; }
+  el.innerHTML = `<div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+      <b>${tareoCola.length} archivo${tareoCola.length>1?'s':''} para cargar</b>
+      <button type="button" class="btn btn-ghost" id="tareoColaLimpiar" style="font-size:12px; padding:4px 10px;">Quitar todos</button>
+    </div>
+    <div style="max-height:180px; overflow:auto;">` +
+    tareoCola.map((f,i)=>`<div style="display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px solid var(--linea);">
+      <span>${f.name}</span>
+      <button type="button" data-quitar="${i}" title="Quitar de la lista" style="border:none; background:none; color:var(--rojo); cursor:pointer;">✕</button>
+    </div>`).join('') + '</div>';
+  document.getElementById('tareoColaLimpiar').addEventListener('click', ()=>{ tareoCola = []; renderTareoCola(); });
+  el.querySelectorAll('button[data-quitar]').forEach(b=> b.addEventListener('click', ()=>{
+    tareoCola.splice(parseInt(b.dataset.quitar,10), 1); renderTareoCola();
+  }));
+}
+
+(function initTareoCola(){
+  const input = document.getElementById('fileTareo');
+  const zona = document.getElementById('tareoDropzone');
+  if(!input || !zona) return;
+  input.addEventListener('change', ()=>{ agregarATareoCola([...input.files]); input.value = ''; });
+  zona.addEventListener('dragover', e=>{ e.preventDefault(); zona.style.borderColor = 'var(--pulpa)'; });
+  zona.addEventListener('dragleave', ()=>{ zona.style.borderColor = 'var(--linea)'; });
+  zona.addEventListener('drop', e=>{
+    e.preventDefault(); zona.style.borderColor = 'var(--linea)';
+    agregarATareoCola([...e.dataTransfer.files]);
+  });
+  renderTareoCola();
+})();
+
 document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('statusMsg');
   statusEl.className = 'status-msg';
@@ -509,7 +576,7 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   const fileCalAra = document.getElementById('fileCalibresArandano').files[0];
   const fileTareoAraList = [...document.getElementById('fileTareoArandano').files];
   const fileHa = document.getElementById('fileHectareas').files[0];
-  const fileTareoList = [...document.getElementById('fileTareo').files];
+  const fileTareoList = [...tareoCola];
   const fileCal = document.getElementById('fileCalibres').files[0];
   const fileBines = document.getElementById('fileBines').files[0];
   if(!fileBal && !fileBalAra && !fileEstAra && !fileHaAra && !fileCalAra && !fileTareoAraList.length && !fileHa && !fileTareoList.length && !fileCal && !fileBines){
@@ -582,12 +649,30 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
       hectareas = parsed;
     }
     if(fileTareoList.length){
-      let rows = [];
+      // Los reportes de cosecha de RR.HH. son acumulativos (el del 9-9 repite las hojas del
+      // 26.08 al 08.09). Si se suben varios a la vez, cada fecha se toma de UN solo archivo —
+      // el más reciente (el que llega a la fecha más avanzada) — para no duplicar trabajadores.
+      const leidos = [];
+      tareoOmitidos = [];
       for(let i=0; i<fileTareoList.length; i++){
         statusEl.textContent = `Leyendo tareo (${i+1} de ${fileTareoList.length})…`;
-        rows = rows.concat(await readTareoWorkbook(fileTareoList[i]));
+        try{
+          const filas = parseTareoRows(await readTareoWorkbook(fileTareoList[i]));
+          const maxFecha = filas.reduce((m,r)=> r.fecha > m ? r.fecha : m, '');
+          leidos.push({ nombre: fileTareoList[i].name, maxFecha, filas });
+        }catch(err){
+          // Un archivo con formato distinto no debe frenar la carga del resto.
+          tareoOmitidos.push(fileTareoList[i].name + ': ' + err.message);
+        }
       }
-      const parsed = parseTareoRows(rows);
+      leidos.sort((a,b)=> a.maxFecha.localeCompare(b.maxFecha) || a.nombre.localeCompare(b.nombre, 'es', {numeric:true}));
+      const porFecha = new Map(); // fecha -> filas del archivo más reciente que la trae
+      for(const archivo of leidos){
+        const grupos = new Map();
+        archivo.filas.forEach(r=>{ if(!grupos.has(r.fecha)) grupos.set(r.fecha, []); grupos.get(r.fecha).push(r); });
+        grupos.forEach((filas, fecha)=> porFecha.set(fecha, filas));
+      }
+      const parsed = [...porFecha.values()].flat();
       if(!parsed.length) throw new Error('El/los Excel de tareo no tienen filas válidas de jornales/tacheros.');
       const merged = mergeTareoByDate(tareo, parsed);
       const { error } = await sb.from('tareo_data').update({ data: merged, updated_by: currentUser.email }).eq('id', 1);
@@ -615,6 +700,9 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
     const stamp = new Date().toLocaleString('es-PE', {dateStyle:'short', timeStyle:'short'});
     document.getElementById('updatedChip').textContent = 'Datos actualizados: ' + stamp;
     statusEl.className='status-msg ok'; statusEl.textContent='Datos guardados y aplicados para todos los usuarios.';
+    if(fileTareoList.length && tareoOmitidos.length){
+      statusEl.textContent += ` Se omitieron ${tareoOmitidos.length} archivo(s) de tareo: ` + tareoOmitidos.join(' | ');
+    }
     document.getElementById('fileBalanza').value = '';
     document.getElementById('fileBalanzaArandano').value = '';
     document.getElementById('fileEstimacionArandano').value = '';
@@ -623,6 +711,7 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
     document.getElementById('fileTareoArandano').value = '';
     document.getElementById('fileHectareas').value = '';
     document.getElementById('fileTareo').value = '';
+    tareoCola = []; renderTareoCola();
     document.getElementById('fileCalibres').value = '';
     document.getElementById('fileBines').value = '';
     renderAll();

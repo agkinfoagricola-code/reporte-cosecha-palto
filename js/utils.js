@@ -6,6 +6,17 @@ const pct = n => (n*100).toLocaleString('es-PE', {maximumFractionDigits:1}) + '%
 /* ============ SUPABASE CONFIG ============ */
 // Reemplaza estos dos valores con los de tu proyecto de Supabase
 // (Project Settings → API → Project URL / anon public key).
+/* Horas del tareo de RR.HH.: las fracciones vienen como hh.mm (4.30 = 4 h 30 min). */
+// 4.30 -> 4.5 h ; 8 -> 8 h ; 3.45 -> 3.75 h. Si la parte "minutos" es >= 60 se asume que ya
+// venía en decimal y se deja tal cual.
+function horasDecimalesTareo(h){
+  const v = (typeof h === 'number' && !isNaN(h)) ? h : 8;
+  const ent = Math.floor(v);
+  const min = Math.round((v - ent) * 100);
+  if(min >= 60) return v;
+  return ent + min / 60;
+}
+
 function uniq(arr){ return [...new Set(arr)].sort(); }
 function loteRed(lote, red){ return lote + '-' + red; }
 

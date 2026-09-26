@@ -26,7 +26,7 @@ function populateFilters(){
         else activeVariedades = [...activeVariedades, v];
       }
       gf.querySelectorAll('button').forEach(b=> b.classList.toggle('active', isVariedadBtnActive(b.dataset.v)));
-      renderKPIs(); renderCosecha(); renderPlan(); renderAvance(); renderSectores(); renderBins(); populateCalibresFilters(); renderCalibres(); renderCosechadores();
+      renderKPIs(); renderCosecha(); renderPlan(); renderAvance(); renderSectores(); renderBins(); populateCalibresFilters(); renderCalibres(); renderCosechadores(); renderKgJornalLote();
       if(cultivoActivo === 'palto'){ renderInicio(); } else { populateCicloFilters(); renderCiclo(); }
     });
   });
