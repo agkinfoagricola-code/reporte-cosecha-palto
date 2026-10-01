@@ -1,7 +1,7 @@
 /* ============ FILTER POPULATION ============ */
 function populateFilters(){
   const variedades = cultivoActivo === 'arandano'
-    ? uniq([...balanza.map(r=>r.variedad), ...ESTIMACION_ARANDANO_VARIEDAD.map(e=>e.variedad)])
+    ? uniq([...balanza.map(r=>r.variedad), ...ESTIMACION_ARANDANO_VARIEDAD.map(e=>e.variedad), ...computeSectorDetailsArandano().map(e=>e.variedad)])
     : uniq(balanza.map(r=>r.variedad));
   const lotes = uniq(balanza.map(r=>r.lote));
 
@@ -50,7 +50,7 @@ function isVariedadBtnActive(v){
 function populateSectorFilters(){
   const selLote = document.getElementById('f5-lote');
   const lotesConSector = cultivoActivo === 'arandano'
-    ? uniq(estimacionArandanoLoteRed.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b))
+    ? uniq([...estimacionArandanoLoteRed, ...computeSectorDetailsArandano()].map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b))
     : uniq(ESTIMACION.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b));
   const prevLote = selLote.value;
   selLote.innerHTML = '<option value="">Todos los lotes</option>' + lotesConSector.map(l=>`<option value="${l}">Lote ${l}</option>`).join('');
@@ -59,7 +59,7 @@ function populateSectorFilters(){
   const loteSel = selLote.value;
   const redsDelLote = loteSel
     ? (cultivoActivo === 'arandano'
-        ? uniq(estimacionArandanoLoteRed.filter(e=>e.lote==loteSel).map(e=>e.red))
+        ? uniq([...estimacionArandanoLoteRed, ...computeSectorDetailsArandano()].filter(e=>e.lote==loteSel).map(e=>e.red))
         : uniq(ESTIMACION.filter(e=>e.lote==loteSel).map(e=>e.red)))
     : [];
   const selRed = document.getElementById('f5-red');

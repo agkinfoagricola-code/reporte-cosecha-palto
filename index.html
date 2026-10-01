@@ -232,12 +232,13 @@
   <!-- PAGE 5b (ARÁNDANO): DÍAS DE CICLO -->
   <section class="page" id="page-ciclo">
     <div class="filters">
+      <label>Fecha de consulta <input type="date" id="f8-fecha" value="2026-10-01"></label>
       <select id="f8-lote"></select>
       <select id="f8-red"><option value="">Todas las redes</option></select>
       <input type="text" id="f8-sectorSearch" placeholder="Filtrar sectores (ej: 43,47,48,50)" style="min-width:220px;">
       <select id="f8-orden">
-        <option value="alerta">Ordenar: más atrasados primero</option>
         <option value="lote">Ordenar: Lote-Red-Sector</option>
+        <option value="alerta">Ordenar: más atrasados primero</option>
         <option value="reciente">Ordenar: última cosecha más reciente</option>
       </select>
       <select id="f8-pageSize">
@@ -250,12 +251,13 @@
     <section class="kpi-strip" id="kpiCiclo"></section>
     <div class="panel">
       <h3 style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-        <span>Ciclo de cosecha por Lote-Red-Sector <span class="tag">días entre cortes</span></span>
+        <span>Ciclo de cosecha por Lote-Red-Sector <span class="tag">días desde fin de pasada</span></span>
         <button class="btn btn-ghost" id="exportCicloBtn" style="font-size:12px; padding:7px 14px;">⬇️&nbsp; Descargar Excel</button>
       </h3>
       <p style="font-size:12px; color:#8a8f83; margin:0 0 10px 0;">
-        "Días desde último corte" en rojo significa que ya pasó más tiempo del ciclo promedio
-        de ese sector sin volver a cosecharse — puede estar listo para una nueva ronda.
+        La columna de fecha muestra los días desde F. Fin hasta la fecha de consulta.
+        Solo se consideran avances registrados hasta esa fecha. Pasada conserva el número reportado; — indica un dato no disponible.
+        Incluye la referencia compartida al 01/10/2026 y los avances cargados posteriormente.
       </p>
       <div class="tablewrap"><table id="tableCiclo"></table></div>
       <div id="cicloPager" style="display:flex; align-items:center; justify-content:center; gap:12px; padding-top:14px; font-family:var(--font-mono); font-size:12.5px;"></div>
@@ -521,25 +523,26 @@
 
 <!-- ============ Módulos de la app (orden importa: cada uno usa funciones/variables
      definidas por los anteriores, ya que comparten el scope global del documento) ============ -->
-<script src="js/data-seed.js"></script>
-<script src="js/data-defaults.js"></script>
-<script src="js/supabase-client.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/state.js"></script>
-<script src="js/charts.js"></script>
-<script src="js/filters.js"></script>
-<script src="js/data-store.js"></script>
-<script src="js/vista-dashboard.js"></script>
-<script src="js/calculos-avance-ha.js"></script>
-<script src="js/calculos-bines.js"></script>
-<script src="js/vista-avance.js"></script>
-<script src="js/vista-sectores.js"></script>
-<script src="js/vista-ciclo.js"></script>
-<script src="js/vista-calibres.js"></script>
-<script src="js/vista-cosechadores.js"></script>
-<script src="js/vista-kg-jornal-lote.js"></script>
-<script src="js/carga-datos.js"></script>
-<script src="js/app.js"></script>
-<script src="js/auth.js"></script>
+<script src="js/data-seed.js?v=20261001-ciclos-sectores"></script>
+<script src="js/data-defaults.js?v=20261001-ciclos-sectores"></script>
+<script src="js/supabase-client.js?v=20261001-ciclos-sectores"></script>
+<script src="js/utils.js?v=20261001-ciclos-sectores"></script>
+<script src="js/state.js?v=20261001-ciclos-sectores"></script>
+<script src="js/charts.js?v=20261001-ciclos-sectores"></script>
+<script src="js/filters.js?v=20261001-ciclos-sectores"></script>
+<script src="js/data-store.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-dashboard.js?v=20261001-ciclos-sectores"></script>
+<script src="js/ciclos-referencia.js?v=20261001-ciclos-sectores"></script>
+<script src="js/calculos-avance-ha.js?v=20261001-ciclos-sectores"></script>
+<script src="js/calculos-bines.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-avance.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-sectores.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-ciclo.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-calibres.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-cosechadores.js?v=20261001-ciclos-sectores"></script>
+<script src="js/vista-kg-jornal-lote.js?v=20261001-ciclos-sectores"></script>
+<script src="js/carga-datos.js?v=20261001-ciclos-sectores"></script>
+<script src="js/app.js?v=20261001-ciclos-sectores"></script>
+<script src="js/auth.js?v=20261001-ciclos-sectores"></script>
 </body>
 </html>

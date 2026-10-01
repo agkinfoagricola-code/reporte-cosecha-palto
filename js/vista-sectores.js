@@ -163,7 +163,7 @@ function renderSectores(){
 function renderSectoresArandano(){
   const fLote = document.getElementById('f5-lote').value;
   const fRed = document.getElementById('f5-red').value;
-  const lotesAProcesar = fLote ? [String(fLote)] : uniq(estimacionArandanoLoteRed.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
+  const lotesAProcesar = fLote ? [String(fLote)] : uniq([...estimacionArandanoLoteRed, ...computeSectorDetailsArandano()].map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
 
   let sectorDetails = computeSectorDetailsArandano().filter(s => lotesAProcesar.includes(String(s.lote)) && (!fRed || s.red===fRed));
 
@@ -191,32 +191,32 @@ function renderSectoresArandano(){
     const sectorDetailsDeLote = sectorDetails.filter(s=>String(s.lote)===lote);
     const reds = uniq(sectorDetailsDeLote.map(s=>s.red));
     reds.forEach(red=>{
-      const sectoresDeRed = sectorDetailsDeLote.filter(s=>s.red===red).sort((a,b)=> a.sector.localeCompare(b.sector));
+      const sectoresDeRed = sectorDetailsDeLote.filter(s=>s.red===red).sort((a,b)=> a.sector.localeCompare(b.sector, undefined, {numeric:true}));
       const variedadesDeRed = uniq(sectoresDeRed.map(s=>s.variedad))
         .filter(v=> activeVariedades.length===0 || activeVariedades.includes(v));
 
       variedadesDeRed.forEach(v=>{
         const e = estimacionArandanoLoteRed.find(x=> String(x.lote)===lote && x.red===red && x.variedad===v);
-        if(!e) return; // no hay presupuesto cargado para esta combinación Lote-Red-Variedad
+        // Sectores sin presupuesto también se muestran; no se inventa su meta.
 
         const sectoresDeVariedad = sectoresDeRed.filter(s=>s.variedad===v);
         const supSum = supSumByKey.get(lote+'-'+red+'-'+v) || 0;
 
         const kgRealTotal = balanza.filter(b=> String(b.lote)===lote && b.red===red && b.variedad===v).reduce((s,r)=>s+r.kg,0);
-        const haTotal = sectoresDeVariedad.reduce((s,x)=>s+x.superficie,0);
-        const kgPptoTotal = e.kgPpto;
-        const kgHaPpto = e.has>0 ? e.kgPpto/e.has : 0;
+        const haTotal = supSum;
+        const kgPptoTotal = e ? e.kgPpto : null;
+        const kgHaPpto = e && e.has>0 ? e.kgPpto/e.has : 0;
         const kgHaReal = haTotal>0 ? kgRealTotal/haTotal : 0;
         const cump = kgHaPpto>0 ? kgHaReal/kgHaPpto : 0;
 
         filas.push(`<tr style="background:#EEF3EE; font-weight:600;">
           <td colspan="2">Total Lote ${lote} - ${red} - ${v}</td>
           <td class="num">${fmt1(haTotal)}</td>
-          <td class="num">${fmt(kgPptoTotal)}</td>
+          <td class="num">${e ? fmt(kgPptoTotal) : '—'}</td>
           <td class="num">${fmt(kgRealTotal)}</td>
-          <td class="num">${fmt(kgHaPpto)}</td>
+          <td class="num">${e ? fmt(kgHaPpto) : '—'}</td>
           <td class="num">${fmt(kgHaReal)}</td>
-          <td>${estadoPill(cump)}</td>
+          <td>${e ? estadoPill(cump) : 'Sin presupuesto'}</td>
           <td class="num">100%</td></tr>`);
 
         sectoresDeVariedad.forEach(s=>{
@@ -232,11 +232,11 @@ function renderSectoresArandano(){
 
           filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
             <td class="num">${fmt1(s.superficie)}</td>
-            <td class="num">${fmt(kgPptoSector)}</td>
+            <td class="num">${e ? fmt(kgPptoSector) : '—'}</td>
             <td class="num">${fmt(kgRealSector)}</td>
-            <td class="num">${fmt(kgHaPptoSector)}</td>
+            <td class="num">${e ? fmt(kgHaPptoSector) : '—'}</td>
             <td class="num">${fmt(kgHaRealSector)}</td>
-            <td>${estadoPill(ratioSector)}</td>
+            <td>${e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
             <td class="num">${pct(share)}</td></tr>`);
         });
       });

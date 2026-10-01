@@ -1,44 +1,44 @@
-/* ============ ARÁNDANO: DÍAS DE CICLO ============
-   El arándano no se cosecha una sola vez por sector como la palta — el mismo Lote-Red-Sector-
-   Variedad se vuelve a cosechar varias veces durante la campaña, ronda tras ronda, porque el
-   fruto sigue madurando (ver hectareasArandano, el avance de campo reportado por el líder).
-   Esta vista mide cuántos días pasan entre una cosecha y la siguiente para cada sector: por
-   ejemplo, un sector cosechado el día 1, el día 6 y el día 10 tuvo un ciclo de 5 días y luego
-   uno de 4 días. Sirve para detectar sectores que ya deberían haber vuelto a cosecharse según
-   su propio ritmo histórico. */
+/* Días de ciclo: última pasada conocida a la fecha de consulta.
+   La referencia del 01/10/2026 complementa el historial de avances cargado.
+   Pasada es el número reportado, no el conteo de fechas disponibles. */
 
-function computeCiclosPorSector(){
-  const bySector = new Map(); // "lote|red|sector|variedad" -> Set(fechas)
-  hectareasArandano.forEach(h=>{
-    if(!h.lote || !h.red || !h.sector) return;
-    const key = h.lote+'|'+h.red+'|'+h.sector+'|'+h.variedad;
-    if(!bySector.has(key)) bySector.set(key, new Set());
-    bySector.get(key).add(h.fecha);
+function fechaConsultaCiclo(){
+  return document.getElementById('f8-fecha').value || new Date().toISOString().slice(0,10);
+}
+function computeCiclosPorSector(fechaConsulta = fechaConsultaCiclo()){
+  const grupos = new Map();
+  avancesArandanoConReferencia().forEach(h=>{
+    if(!h.lote || !h.red || !h.sector || !h.fecha || h.fecha > fechaConsulta) return;
+    const key = [h.lote,h.red,h.sector,h.variedad].join('|');
+    if(!grupos.has(key)) grupos.set(key, []);
+    grupos.get(key).push(h);
   });
-
-  const hoy = new Date().toISOString().slice(0,10);
-  const out = [];
-  bySector.forEach((fechasSet, key)=>{
-    const [lote, red, sector, variedad] = key.split('|');
-    const fechas = [...fechasSet].sort();
-    const ciclos = [];
-    for(let i=1; i<fechas.length; i++){
-      const d = daysBetween(fechas[i-1], fechas[i]);
-      if(d != null && d > 0) ciclos.push(d);
-    }
-    const ultimaFecha = fechas[fechas.length-1];
+  return [...grupos.values()].map(registros=>{
+    registros.sort((a,b)=>a.fecha.localeCompare(b.fecha) || Number(!!a.referencia)-Number(!!b.referencia));
+    const ultimo = registros[registros.length-1];
+    const fechas = [...new Set(registros.map(h=>h.fecha))].sort();
+    const ciclos = fechas.slice(1).map((f,i)=>daysBetween(fechas[i],f)).filter(d=>d>0);
     const cicloProm = ciclos.length ? ciclos.reduce((a,b)=>a+b,0)/ciclos.length : null;
-    const cicloMin = ciclos.length ? Math.min(...ciclos) : null;
-    const cicloMax = ciclos.length ? Math.max(...ciclos) : null;
-    const diasDesdeUltimo = daysBetween(ultimaFecha, hoy);
-    out.push({
-      lote: parseInt(lote, 10), red, sector, variedad,
-      fechas, ciclos, nCosechas: fechas.length,
-      ultimaFecha, cicloProm, cicloMin, cicloMax, diasDesdeUltimo,
-      atrasado: cicloProm != null && diasDesdeUltimo != null && diasDesdeUltimo > cicloProm,
-    });
+    const diasDesdeUltimo = daysBetween(ultimo.fecha, fechaConsulta);
+    return {...ultimo, fechas, ciclos, nCosechas:fechas.length,
+      ultimaFecha:ultimo.fecha, fechaInicio:ultimo.fechaInicio || ultimo.fecha,
+      pasada:ultimo.pasada ?? null, haAvan:ultimo.haAvan ?? null,
+      cicloProm, diasDesdeUltimo,
+      atrasado:cicloProm != null && diasDesdeUltimo > cicloProm};
   });
-  return out;
+}
+function encabezadosCiclo(){
+  const fecha = new Date(fechaConsultaCiclo()+'T12:00:00Z');
+  const dia = new Intl.DateTimeFormat('es-PE', {weekday:'short', timeZone:'UTC'}).format(fecha).replace('.', '');
+  return ['Lote','Red A','Sector','Variedad','Tunel','Ha Sector','Pasada','F. Inicio','F. Fin','Ha Avan',
+    dia+' '+fechaConsultaCiclo().slice(8,10)+'/'+fechaConsultaCiclo().slice(5,7)];
+}
+function valoresCiclo(r){
+  return [r.lote, r.red.replace(/^R0*/, '') || r.red, r.sector, r.variedad, r.tunel || '',
+    r.superficie, r.pasada ?? '', r.fechaInicio, r.ultimaFecha, r.haAvan ?? '', r.diasDesdeUltimo];
+}
+function escaparCiclo(value){
+  return String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 function populateCicloFilters(){
@@ -79,7 +79,7 @@ function renderCiclo(){
   });
 
   if(fOrden === 'lote'){
-    rows.sort((a,b)=> a.lote-b.lote || a.red.localeCompare(b.red) || a.sector.localeCompare(b.sector));
+    rows.sort((a,b)=> a.lote-b.lote || a.red.localeCompare(b.red, undefined, {numeric:true}) || a.sector.localeCompare(b.sector, undefined, {numeric:true}) || a.variedad.localeCompare(b.variedad));
   } else if(fOrden === 'reciente'){
     rows.sort((a,b)=> b.ultimaFecha.localeCompare(a.ultimaFecha));
   } else { // 'alerta': más atrasados primero (los sin ciclo histórico van al final)
@@ -109,10 +109,7 @@ function renderCiclo(){
     </div>`).join('');
 
   // --- tabla ---
-  let thead = `<tr><th>LR Sector</th><th>Variedad</th><th class="num">N° Cosechas</th>
-    <th style="white-space:nowrap;">Última Fecha</th><th class="num">Ciclo Prom. (d)</th>
-    <th class="num">Ciclo Mín.</th><th class="num">Ciclo Máx.</th>
-    <th class="num">Días desde último corte</th><th>Historial de ciclos (días)</th><th>Estado</th></tr>`;
+  const thead = '<tr>'+encabezadosCiclo().map(h=>'<th>'+escaparCiclo(h)+'</th>').join('')+'</tr>';
 
   const pageSizeSel = document.getElementById('f8-pageSize');
   const pageSize = pageSizeSel.value === 'todas' ? rows.length || 1 : parseInt(pageSizeSel.value);
@@ -121,28 +118,12 @@ function renderCiclo(){
   if(cicloPage < 0) cicloPage = 0;
   const rowsPagina = rows.slice(cicloPage*pageSize, cicloPage*pageSize + pageSize);
 
-  const estadoPillCiclo = (r) => {
-    if(r.cicloProm == null) return '<span class="pill" style="background:#EEE; color:#888;">1ª cosecha</span>';
-    if(r.atrasado) return '<span class="pill" style="background:#FBDCE0; color:#B3273D;">Atrasado</span>';
-    return '<span class="pill" style="background:#DCEFE1; color:#1B6B3C;">A tiempo</span>';
-  };
-
-  const tbody = rowsPagina.map(r=>{
-    const diasColor = r.atrasado ? '#B3273D' : 'inherit';
-    const diasWeight = r.atrasado ? '700' : 'inherit';
-    return `<tr><td>L${String(r.lote).padStart(2,'0')} ${r.red} ${r.sector}</td><td>${r.variedad}</td>
-      <td class="num">${r.nCosechas}</td>
-      <td style="white-space:nowrap;">${r.ultimaFecha}</td>
-      <td class="num">${r.cicloProm!=null ? fmt1(r.cicloProm) : '—'}</td>
-      <td class="num">${r.cicloMin ?? '—'}</td>
-      <td class="num">${r.cicloMax ?? '—'}</td>
-      <td class="num" style="color:${diasColor}; font-weight:${diasWeight};">${r.diasDesdeUltimo ?? '—'}</td>
-      <td style="font-family:var(--font-mono); font-size:12px; color:#8a8f83;">${r.ciclos.join(', ') || '—'}</td>
-      <td>${estadoPillCiclo(r)}</td></tr>`;
-  }).join('');
+  const tbody = rowsPagina.map(r=>'<tr>'+valoresCiclo(r).map((v,i)=>
+    `<td${[0,1,2,5,6,9,10].includes(i) ? ' class="num"' : ''}>${escaparCiclo(v === '' && i !== 4 ? '—' : v)}</td>`
+  ).join('')+'</tr>').join('');
 
   document.getElementById('tableCiclo').innerHTML = rows.length ? (thead + tbody) : (thead +
-    `<tr><td colspan="10" style="text-align:center; color:#8a8f83; padding:24px;">
+    `<tr><td colspan="11" style="text-align:center; color:#8a8f83; padding:24px;">
       No hay datos de avance de campo de Arándano todavía. Súbelos desde "Carga de Datos".
     </td></tr>`);
 
@@ -164,21 +145,13 @@ function exportCicloToExcel(){
     alert('No hay datos para exportar todavía.');
     return;
   }
-  const headers = ['Lote-Red-Sector','Variedad','N° Cosechas','Última Fecha','Ciclo Prom. (días)','Ciclo Mín.','Ciclo Máx.','Días desde último corte','Historial de ciclos (días)','Estado'];
-  const aoa = [headers];
-  lastCicloRows.forEach(r=>{
-    const estado = r.cicloProm==null ? '1ª cosecha' : (r.atrasado ? 'Atrasado' : 'A tiempo');
-    aoa.push([
-      `L${String(r.lote).padStart(2,'0')} ${r.red} ${r.sector}`, r.variedad, r.nCosechas, r.ultimaFecha,
-      r.cicloProm!=null ? round1(r.cicloProm) : '', r.cicloMin ?? '', r.cicloMax ?? '',
-      r.diasDesdeUltimo ?? '', r.ciclos.join(', '), estado
-    ]);
-  });
+  const headers = encabezadosCiclo();
+  const aoa = [headers, ...lastCicloRows.map(valoresCiclo)];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = headers.map(h => ({wch: Math.max(h.length+2, 12)}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Días de Ciclo');
-  const stamp = new Date().toISOString().slice(0,10);
+  const stamp = fechaConsultaCiclo();
   XLSX.writeFile(wb, `Dias_de_Ciclo_${stamp}.xlsx`);
 }
 
@@ -188,3 +161,5 @@ document.getElementById('f8-sectorSearch').addEventListener('input', ()=>{ ciclo
 document.getElementById('f8-orden').addEventListener('change', ()=>{ cicloPage = 0; renderCiclo(); });
 document.getElementById('f8-pageSize').addEventListener('change', ()=>{ cicloPage = 0; renderCiclo(); });
 document.getElementById('exportCicloBtn').addEventListener('click', exportCicloToExcel);
+
+document.getElementById('f8-fecha').addEventListener('change', ()=>{ cicloPage = 0; populateCicloFilters(); renderCiclo(); });
