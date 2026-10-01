@@ -383,3 +383,7 @@ body.theme-arandano table tbody tr:hover td{ background-color:rgba(91,42,134,.03
 
 .fila-total-tema{ background:#EEF3EE; }
 body.theme-arandano .fila-total-tema{ background:#F1EAF5; }
+
+/* Ciclos: todos los registros juntos y solo sus filtros propios. */
+body:has(#page-ciclo.active) #globalFilter { display:none; }
+#page-ciclo .tablewrap { max-height:none; }
