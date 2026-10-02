@@ -50,5 +50,19 @@ test('tabla y Excel comparten el orden solicitado; normaliza datos antiguos sin 
   assert.equal(run('computeSectorDetailsArandano().filter(r=>r.lote===15 && r.sector==="11").length'),1);
   assert.equal(run('computeSectorDetailsArandano().find(r=>r.lote===15 && r.sector==="11").red'),'R02');
   assert.deepEqual(JSON.parse(run('JSON.stringify(encabezadosCiclo())')),['Lote','Red A','Sector','Variedad','Tunel','Ha Sector','Pasada','F. Inicio','F. Fin','Ha Avan','jue 01/10']);
-  assert.match(elements.get('tableCiclo').innerHTML,/<th>Ha Avan<\/th><th>jue 01\/10<\/th>/);
+  assert.match(elements.get('tableCiclo').innerHTML,/<th[^>]*>Ha Avan<\/th><th[^>]*>jue 01\/10<\/th>/);
+});
+
+test('pantalla paginada sin Túnel y exportación completa con Túnel',()=>{
+  const {run,elements}=app();
+  run('renderCiclo()');
+  assert.equal((elements.get('tableCiclo').innerHTML.match(/<tr>/g)||[]).length,51);
+  assert.doesNotMatch(elements.get('tableCiclo').innerHTML,/Tunel/);
+  const first=elements.get('tableCiclo').innerHTML;
+  run('cicloPage=1; renderCiclo()');
+  assert.notEqual(elements.get('tableCiclo').innerHTML,first);
+  run(`globalThis.exported=null; globalThis.XLSX={utils:{aoa_to_sheet:a=>{exported=a; return {};},book_new:()=>({}),book_append_sheet(){}},writeFile(){}}; exportCicloToExcel()`);
+  assert.equal(run('exported.length'),run('computeCiclosPorSector().length+1'));
+  assert.equal(run('exported[0][4]'),'Tunel');
+  assert.equal(run('exported.every(r=>r.length===11)'),true);
 });

@@ -59,6 +59,8 @@ function populateCicloFilters(){
 }
 
 let lastCicloRows = [];
+let cicloPage = 0;
+const CICLO_PAGE_SIZE = 50;
 
 function renderCiclo(){
   if(cultivoActivo !== 'arandano') return; // esta vista no aplica a Palto
@@ -78,17 +80,32 @@ function renderCiclo(){
   rows.sort((a,b)=> a.lote-b.lote || a.red.localeCompare(b.red, undefined, {numeric:true}) || a.sector.localeCompare(b.sector, undefined, {numeric:true}) || a.variedad.localeCompare(b.variedad));
   lastCicloRows = rows;
 
-  const thead = '<tr>'+encabezadosCiclo().map(h=>'<th>'+escaparCiclo(h)+'</th>').join('')+'</tr>';
+  const totalPages = Math.max(1, Math.ceil(rows.length / CICLO_PAGE_SIZE));
+  cicloPage = Math.max(0, Math.min(cicloPage, totalPages - 1));
+  const visibleRows = rows.slice(cicloPage * CICLO_PAGE_SIZE, (cicloPage + 1) * CICLO_PAGE_SIZE);
+  const numericColumns = [0,1,2,5,6,9,10];
+  // Túnel se conserva en la exportación, pero no ocupa una columna en pantalla.
+  const thead = '<tr>'+encabezadosCiclo().map((h,i)=>i === 4 ? '' :
+    `<th${numericColumns.includes(i) ? ' class="num"' : ''}>${escaparCiclo(h)}</th>`).join('')+'</tr>';
 
-  const tbody = rows.map(r=>'<tr>'+valoresCiclo(r).map((v,i)=>
+  const tbody = visibleRows.map(r=>'<tr>'+valoresCiclo(r).map((v,i)=>i === 4 ? '' :
     `<td${[0,1,2,5,6,9,10].includes(i) ? ' class="num"' : ''}>${escaparCiclo(v === '' && i !== 4 ? '—' : v)}</td>`
   ).join('')+'</tr>').join('');
 
   document.getElementById('tableCiclo').innerHTML = rows.length ? (thead + tbody) : (thead +
-    `<tr><td colspan="11" style="text-align:center; color:#8a8f83; padding:24px;">
+    `<tr><td colspan="10" style="text-align:center; color:#8a8f83; padding:24px;">
       No hay datos de avance de campo de Arándano todavía. Súbelos desde "Carga de Datos".
     </td></tr>`);
 
+  const pager = document.getElementById('cicloPager');
+  pager.innerHTML = rows.length ? `
+    <button class="btn btn-ghost" id="cicloPrev" ${cicloPage === 0 ? 'disabled' : ''}>‹ Anterior</button>
+    <span aria-live="polite">Página ${cicloPage + 1} de ${totalPages} (${rows.length} filas)</span>
+    <button class="btn btn-ghost" id="cicloNext" ${cicloPage === totalPages - 1 ? 'disabled' : ''}>Siguiente ›</button>` : '';
+  if(rows.length){
+    document.getElementById('cicloPrev').addEventListener('click', ()=>{ cicloPage--; renderCiclo(); });
+    document.getElementById('cicloNext').addEventListener('click', ()=>{ cicloPage++; renderCiclo(); });
+  }
 }
 
 function exportCicloToExcel(){
@@ -106,9 +123,9 @@ function exportCicloToExcel(){
   XLSX.writeFile(wb, `Dias_de_Ciclo_${stamp}.xlsx`);
 }
 
-document.getElementById('f8-lote').addEventListener('change', ()=>{ populateCicloFilters(); renderCiclo(); });
-document.getElementById('f8-red').addEventListener('change', ()=>{ renderCiclo(); });
-document.getElementById('f8-sectorSearch').addEventListener('input', ()=>{ renderCiclo(); });
+document.getElementById('f8-lote').addEventListener('change', ()=>{ cicloPage = 0; populateCicloFilters(); renderCiclo(); });
+document.getElementById('f8-red').addEventListener('change', ()=>{ cicloPage = 0; renderCiclo(); });
+document.getElementById('f8-sectorSearch').addEventListener('input', ()=>{ cicloPage = 0; renderCiclo(); });
 document.getElementById('exportCicloBtn').addEventListener('click', exportCicloToExcel);
 
-document.getElementById('f8-fecha').addEventListener('change', ()=>{ populateCicloFilters(); renderCiclo(); });
+document.getElementById('f8-fecha').addEventListener('change', ()=>{ cicloPage = 0; populateCicloFilters(); renderCiclo(); });
