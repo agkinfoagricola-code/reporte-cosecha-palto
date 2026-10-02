@@ -113,6 +113,8 @@ function renderKPIs(){
 /* ============ PAGE 1: COSECHA ============ */
 function renderCosecha(){
   if(cultivoActivo === 'arandano'){ renderCosechaArandano(); return; }
+  document.getElementById('chartVariedad').hidden = false;
+  document.getElementById('variedadRanking').hidden = true;
   const fLote = document.getElementById('f1-lote').value;
   const rows = balanza.filter(r => matchVariedad(r.variedad) && (!fLote || String(r.lote)===String(fLote)));
 

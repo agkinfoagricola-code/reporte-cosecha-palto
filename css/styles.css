@@ -473,3 +473,13 @@ body.theme-arandano #tableLoteRedDia,body.theme-arandano #tableBinsDia { width:1
 body.theme-arandano #tableLoteRedDia th,body.theme-arandano #tableLoteRedDia td,
 body.theme-arandano #tableBinsDia th,body.theme-arandano #tableBinsDia td { width:auto; overflow:visible; text-overflow:clip; }
 body.theme-arandano #tableLoteRedDia th:first-child,body.theme-arandano #tableLoteRedDia td:first-child { min-width:132px; }
+
+/* Keep Chart.js inline display styles from exposing another crop's canvas. */
+#chartVariedad[hidden], #variedadRanking[hidden],
+body.theme-arandano #chartVariedad { display:none !important; }
+.variety-ranking { box-sizing:border-box; }
+.variety-row { padding:13px 0; }
+.variety-name { font-size:12px; }
+.variety-amount { font-size:14px; }
+.variety-track { height:8px; background:#f0edf6; }
+.variety-track span { background-image:linear-gradient(90deg,#ffffff28,transparent)!important; }

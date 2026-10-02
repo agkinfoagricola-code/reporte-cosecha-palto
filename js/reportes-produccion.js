@@ -113,12 +113,12 @@ function productionChart(id,labels,values,{horizontal=false,dates=false}={}){
   if(charts[id]) charts[id].destroy();
   const colors = horizontal ? values.map((_,i)=>PRODUCTION_PALETTE[i%PRODUCTION_PALETTE.length]) : '#7951bc';
   charts[id] = new Chart(document.getElementById(id).getContext('2d'),{
-    type:'bar', data:{labels,datasets:[{label:'Kg cosechados',data:values,backgroundColor:colors,borderRadius:5,maxBarThickness:horizontal?25:28}]},
-    options:{responsive:true,maintainAspectRatio:false,animation:false,indexAxis:horizontal?'y':'x',
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt(horizontal?ctx.parsed.x:ctx.parsed.y)+' kg',title:items=>dates ? prodDate(items[0].label) : items[0].label}}},
-      scales:{x:horizontal?{beginAtZero:true,grid:{color:'#edf0f5'},ticks:{callback:v=>fmt(v)}}:
-        {grid:{display:false},ticks:{autoSkip:true,maxTicksLimit:9,maxRotation:0,callback:function(v){const d=this.getLabelForValue(v);return dates?prodDate(d).slice(0,5):d;}}},
-        y:horizontal?{grid:{display:false},ticks:{autoSkip:false}}:{beginAtZero:true,grid:{color:'#edf0f5'},ticks:{callback:v=>fmt(v)}}}}
+    type:'bar', data:{labels,datasets:[{label:'Kg cosechados',data:values,backgroundColor:colors,borderRadius:5,borderSkipped:false,maxBarThickness:horizontal?25:28}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},layout:{padding:{top:12,right:12}},indexAxis:horizontal?'y':'x',
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#302444',padding:12,cornerRadius:8,displayColors:false,callbacks:{label:ctx=>fmt(horizontal?ctx.parsed.x:ctx.parsed.y)+' kg',title:items=>dates ? prodDate(items[0].label) : items[0].label}}},
+      scales:{x:horizontal?{beginAtZero:true,border:{display:false},grid:{color:'#edf0f5'},ticks:{maxTicksLimit:6,callback:v=>fmt(v)}}:
+        {border:{display:false},grid:{display:false},ticks:{autoSkip:true,maxTicksLimit:9,maxRotation:0,callback:function(v){const d=this.getLabelForValue(v);return dates?prodDate(d).slice(0,5):d;}}},
+        y:horizontal?{border:{display:false},grid:{display:false},ticks:{autoSkip:false}}:{beginAtZero:true,border:{display:false},grid:{color:'#edf0f5'},ticks:{maxTicksLimit:6,callback:v=>fmt(v)}}}}
   });
 }
 function renderVarietyRanking(rows){
@@ -138,6 +138,10 @@ function prodPager(id,page,total,callback){
   node.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>callback(Number(b.dataset.direction))));
 }
 function renderCosechaArandano(){
+  // Chart.js writes inline display styles: dispose of the previous crop's chart.
+  if(charts.chartVariedad){ charts.chartVariedad.destroy(); delete charts.chartVariedad; }
+  document.getElementById('chartVariedad').hidden = true;
+  document.getElementById('variedadRanking').hidden = false;
   const rows = productionRows();
   const byDate = sumBy(rows,r=>r.fecha,r=>r.kg);
   const dates = [...byDate.keys()].sort();
