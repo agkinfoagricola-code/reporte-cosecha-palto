@@ -154,10 +154,57 @@ function renderSectores(){
 
 /* Arándano: presupuesto repartido por área; kilos reales solo con sector
    identificado. Los totales conservan los kilos de balanza del grupo. */
+
+let sectorReadings = null;
+let sectorReadingsLoading = false;
+let sectorReadingsError = false;
+const normalizeSectorId = value => String(value ?? '').trim().toUpperCase().replace(/^S(?:ECTOR)?\s*0*/, '').replace(/^0+(?=\d)/, '');
+function aggregateSectorReadings(rows){
+  const groups = new Map();
+  rows.forEach(r=>{
+    const sector = normalizeSectorId(r.sector);
+    if(!sector || !(Number(r.cantidad)>0) || !['EXP','NAC'].includes(r.destino)) return;
+    const key = [r.fecha,r.lote,r.red,r.variedad,r.destino].join('|');
+    if(!groups.has(key)) groups.set(key,new Map());
+    const counts = groups.get(key);
+    counts.set(sector,(counts.get(sector)||0)+Number(r.cantidad));
+  });
+  return groups;
+}
+async function loadSectorReadings(){
+  if(sectorReadings || sectorReadingsLoading || sectorReadingsError || typeof sb==='undefined') return;
+  sectorReadingsLoading = true;
+  try{
+    const {data,error} = await sb.from('lecturaind_arandano_data').select('data').eq('id',1).single();
+    if(error || !Array.isArray(data?.data)) throw new Error('Lecturas no disponibles');
+    sectorReadings = aggregateSectorReadings(data.data);
+  }catch(e){ sectorReadingsError = true; }
+  finally{
+    sectorReadingsLoading = false;
+    if(cultivoActivo==='arandano') renderSectoresArandano();
+  }
+}
+function sectorKgFromReadings(records,sector){
+  let kg=0,matched=false;
+  if(!sectorReadings) return null;
+  records.forEach(r=>{
+    ['EXP','NAC'].forEach(market=>{
+      const kilos = r[market==='EXP'?'kgExportable':'kgNacional'];
+      if(kilos==null || !Number.isFinite(Number(kilos))) return;
+      const counts=sectorReadings.get([r.fecha,r.lote,r.red,r.variedad,market].join('|'));
+      if(!counts?.has(normalizeSectorId(sector))) return;
+      const total=[...counts.values()].reduce((sum,n)=>sum+n,0);
+      kg+=Number(kilos)*counts.get(normalizeSectorId(sector))/total;
+      matched=true;
+    });
+  });
+  return matched ? kg : null;
+}
 function formatSectorHa(value){
   return Number(value).toLocaleString('en-US',{maximumFractionDigits:6});
 }
 function renderSectoresArandano(){
+  loadSectorReadings();
   const fLote = document.getElementById('f5-lote').value;
   const fRed = document.getElementById('f5-red').value;
   const lotesAProcesar = fLote ? [String(fLote)] : uniq([...estimacionArandanoLoteRed, ...computeSectorDetailsArandano()].map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
@@ -224,7 +271,8 @@ function renderSectoresArandano(){
           // A group total cannot be presented as measured sector production.
           const identified = records.length>0 && records.every(r=>r.sector!=null && String(r.sector).trim()!=='');
           const sectorRecords = records.filter(r=>sectorId(r.sector)===sectorId(s.sector));
-          const kgRealSector = identified && sectorRecords.length ? sectorRecords.reduce((sum,r)=>sum+r.kg,0) : null;
+          const kgRealSector = identified && sectorRecords.length ? sectorRecords.reduce((sum,r)=>sum+r.kg,0) : sectorKgFromReadings(records,s.sector);
+          const estimated = !identified && kgRealSector!=null;
           const kgHaPptoSector = s.superficie>0 ? kgPptoSector/s.superficie : 0;
           const kgHaRealSector = kgRealSector!=null && s.superficie>0 ? kgRealSector/s.superficie : null;
           // % vs la meta del Lote-Red-Variedad completo (kgHaPpto), no el Kg Ppto/Ha
@@ -235,10 +283,10 @@ function renderSectoresArandano(){
           filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
             <td class="num">${formatSectorHa(s.superficie)}</td>
             <td class="num">${e ? fmt(kgPptoSector) : '—'}</td>
-            <td class="num">${kgRealSector!=null ? fmt(kgRealSector) : '—'}</td>
+            <td class="num">${kgRealSector!=null ? fmt(kgRealSector)+(estimated?' *':'') : '—'}</td>
             <td class="num">${e ? fmt(kgHaPptoSector) : '—'}</td>
-            <td class="num">${kgHaRealSector!=null ? fmt(kgHaRealSector) : '—'}</td>
-            <td>${kgRealSector==null ? 'Sin kilos por sector' : s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
+            <td class="num">${kgHaRealSector!=null ? fmt(kgHaRealSector)+(estimated?' *':'') : '—'}</td>
+            <td>${kgRealSector==null ? (sectorReadingsLoading ? 'Cargando lecturas…' : sectorReadingsError ? 'Error al consultar lecturas' : 'Sin kilos o lecturas coincidentes') : s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
             <td class="num">${pct(share)}</td></tr>`);
         });
       });

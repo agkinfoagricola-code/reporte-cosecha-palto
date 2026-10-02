@@ -97,6 +97,23 @@ test('rendimiento sectorial usa kilos identificados y no prorratea la balanza',(
   assert.ok(rows.find(r=>r.includes('R01 2')).includes('>200</td>'));
   run('balanza.forEach(r=>delete r.sector);renderSectoresArandano();');
   html=elements.get('tableSectores').innerHTML;
-  assert.equal((html.match(/Sin kilos por sector/g)||[]).length,2);
+  assert.equal((html.match(/Sin kilos o lecturas coincidentes/g)||[]).length,2);
   assert.match(html,/>900<\/td>/);
+});
+
+test('distribuye kilos por jabas de la misma fecha y mercado sin inventar histórico',()=>{
+  const {run}=app();
+  run(`sectorReadings=aggregateSectorReadings([
+    {fecha:'2026-10-01',lote:7,red:'R01',variedad:'VENTURA',sector:'S01',destino:'EXP',cantidad:30},
+    {fecha:'2026-10-01',lote:7,red:'R01',variedad:'VENTURA',sector:'S02',destino:'EXP',cantidad:70},
+    {fecha:'2026-10-01',lote:7,red:'R01',variedad:'VENTURA',sector:'S01',destino:'NAC',cantidad:80},
+    {fecha:'2026-10-01',lote:7,red:'R01',variedad:'VENTURA',sector:'S02',destino:'NAC',cantidad:20}
+  ]);
+  balanza=[
+    {fecha:'2026-10-01',lote:7,red:'R01',variedad:'VENTURA',kgExportable:1000,kgNacional:100},
+    {fecha:'2026-09-01',lote:7,red:'R01',variedad:'VENTURA',kgExportable:9000,kgNacional:900}
+  ];`);
+  assert.equal(run("sectorKgFromReadings(balanza,'1')"),380);
+  assert.equal(run("sectorKgFromReadings(balanza,'2')"),720);
+  assert.equal(run("sectorKgFromReadings(balanza,'3')"),null);
 });
