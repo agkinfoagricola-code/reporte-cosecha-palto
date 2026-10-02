@@ -79,6 +79,8 @@ document.getElementById('sidebar').addEventListener('click', e=>{
   const ARA_PAGE_TITLES = { bins: 'Kg. Jabas', calibres: 'Calibres de Fruto' };
   document.getElementById('pageTitle').textContent = (esAraTitle && ARA_PAGE_TITLES[btn.dataset.page]) || PAGE_TITLES[btn.dataset.page] || '';
   if(btn.dataset.page === 'usuarios') loadUsersList();
+  renderKPIs();
+  if(cultivoActivo === 'arandano' && ['cosecha','bins'].includes(btn.dataset.page)) refreshProductionReports();
   closeSidebarMobile();
 });
 
