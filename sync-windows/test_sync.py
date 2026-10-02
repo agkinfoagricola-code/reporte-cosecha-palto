@@ -1,0 +1,117 @@
+import datetime as dt
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import openpyxl
+import parsers
+import sync
+
+class ParsersTest(unittest.TestCase):
+    def workbook(self, name, headers, rows):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name)/name
+        wb = openpyxl.Workbook()
+        if name == 'balanza.xlsx':
+            wb.active.title = 'DATOS'
+        wb.active.append(headers)
+        for r in rows:
+            wb.active.append(r)
+        wb.save(path)
+        return path
+
+    def test_hours_are_segments(self):
+        path = self.workbook('tareo.xlsx', ['Fecha','CodOperario','CodLabor','HORA_INI_LAB','HORA_FIN_LAB','totHoras'],
+          [[dt.datetime(2026,9,28),1,5129,'06:30','09:20',32],
+           [dt.datetime(2026,9,28),1,5129,'09:20','12:00',32],
+           [dt.datetime(2026,9,28),1,5129,'09:20','12:00',32],
+           [dt.datetime(2026,9,28),2,5137,'07:30','09:30',9]])
+        rows = parsers.read(path,2026)
+        self.assertEqual(len(rows),3)
+        self.assertAlmostEqual(rows[0]['horas'],2+50/60)
+        self.assertAlmostEqual(rows[1]['horas'],2+40/60)
+        self.assertEqual(rows[2]['horas'],2)
+        self.assertEqual(rows[2]['codlab'],5137)
+
+    def test_invalid_hours_reject_file(self):
+        path = self.workbook('tareo.xlsx',['Fecha','CodOperario','CodLabor','HORA_INI_LAB','HORA_FIN_LAB'],
+                             [[dt.datetime(2026,9,28),1,5129,'12:00','09:30']])
+        with self.assertRaisesRegex(ValueError,'Fin anterior'):
+            parsers.read(path,2026)
+
+    def test_balanza_confirmed_rule_and_year(self):
+        path = self.workbook('balanza.xlsx',['FECHA COSECHA','LOTE','RED','VARIEDAD','KG. NETOS','DESCARTE'],
+          [[dt.datetime(2026,5,16),7,'Z','VENTURA',1112.37,9.57],
+           [dt.datetime(2025,5,16),7,'1','VENTURA',999,9]])
+        r = parsers.read(path,2026)
+        self.assertEqual(len(r),1)
+        self.assertEqual(r[0]['red'],'R01')
+        self.assertAlmostEqual(r[0]['kg'],1121.94)
+
+    def test_history_and_idempotence(self):
+        old = [{'fecha':'2026-09-01','codigo':1},{'fecha':'2026-09-28','codigo':2}]
+        incoming = [{'fecha':'2026-09-28','codigo':3}]
+        result = parsers.merge(parsers.TABLES[2],old,incoming)
+        self.assertEqual(result,[old[0],incoming[0]])
+        self.assertEqual(result,parsers.merge(parsers.TABLES[2],result,incoming))
+
+    def test_area_preserved_as_area_not_sum(self):
+        old = [{'fecha':'2026-09-01','lote':7,'red':'R01','sector':'S01','variedad':'VENTURA','superficie':2}]
+        incoming = [{**old[0],'superficie':3,'haAvan':1}]
+        result = parsers.merge(parsers.TABLES[1],old,incoming)
+        self.assertEqual(len(result),1)
+        self.assertEqual(result[0]['superficie'],3)
+
+    def test_jabas_dont_invent_weight_or_erase_other_dates(self):
+        base = {'fecha':'2026-09-28','lote':7,'red':'R01','variedad':'VENTURA','kg':50,'envases':3}
+        readings = [{**base,'cantidad':5}]
+        result = parsers.apply_jabas([base,{**base,'fecha':'2026-09-20'}],readings)
+        self.assertEqual(result[0]['kg'],50)
+        self.assertEqual(result[0]['envases'],5)
+        self.assertEqual(result[1]['envases'],3)
+
+class TransportTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+        for f in parsers.FILES:
+            (self.root/f).write_text('test')
+        self.hashes = {f:sync.fingerprint(self.root/f) for f in parsers.FILES}
+        self.parsed = {t:[{'fecha':'2026-09-28','lote':7,'red':'R01','variedad':'VENTURA','cantidad':1}] for t in parsers.TABLES}
+        self.snapshot = {t:{'data':[],'version':'remote'} for t in parsers.TABLES}
+        self.config = {'folder':str(self.root),'year':2026}
+
+    def test_manual_change_blocks_all_writes(self):
+        from unittest.mock import Mock
+        api = Mock(); api.request.return_value = self.snapshot
+        state = {'files':{},'versions':{parsers.TABLES[0]:'older'}}
+        with patch.object(sync,'collect',return_value=(self.hashes,self.parsed)):
+            with self.assertRaisesRegex(ValueError,'cambios manuales'):
+                sync.run_once(api,self.config,state)
+        self.assertEqual(api.request.call_count,1)
+
+    def test_error_does_not_mark_files_synced(self):
+        from unittest.mock import Mock
+        api = Mock();api.request.side_effect = [self.snapshot,RuntimeError('network')]
+        with patch.object(sync,'BASE',self.root), patch.object(sync,'collect',return_value=(self.hashes,self.parsed)):
+            with self.assertRaises(RuntimeError):
+                sync.run_once(api,self.config,{})
+        self.assertFalse((self.root/'state.json').exists())
+        self.assertEqual(len(list((self.root/'backups').glob('*.gz'))),1)
+
+    def test_success_is_saved_and_unchanged_files_not_uploaded(self):
+        from unittest.mock import Mock
+        versions = {t:'new' for t in parsers.TABLES}
+        api = Mock();api.request.side_effect = [self.snapshot,versions]
+        with patch.object(sync,'BASE',self.root), patch.object(sync,'collect',return_value=(self.hashes,self.parsed)):
+            result = sync.run_once(api,self.config,{})
+            self.assertEqual(result['versions'],versions)
+            self.assertEqual(json.loads((self.root/'state.json').read_text())['files'],self.hashes)
+            sync.run_once(api,self.config,result)
+        self.assertEqual(api.request.call_count,2)
+
+if __name__ == '__main__':
+    unittest.main()
