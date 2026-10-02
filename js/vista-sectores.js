@@ -152,14 +152,8 @@ function renderSectores(){
   }
 }
 
-/* ============ PAGE 5 (ARÁNDANO): DETALLE SECTORES — prorrateo por Ha ============
-   El presupuesto de Arándano (estimacionArandanoLoteRed) solo viene a nivel Lote-Red-Variedad
-   (no trae Sector — ver Excel de estimación), así que el Kg Ppto de cada Lote-Red-Variedad se
-   reparte entre sus sectores según su participación en la Hectarea total reportada por el
-   líder (computeSectorDetailsArandano) — el mismo criterio de prorrateo que usa Palto cuando
-   todavía no tiene bines cargados. El mismo % se aplica al Kg Real de balanza. Si en el futuro
-   se carga un comparativo de jabas por sector, se puede agregar acá un fallback igual al de
-   shareBinesPorLoteRed() en Palto. */
+/* Arándano: presupuesto repartido por área; kilos reales solo con sector
+   identificado. Los totales conservan los kilos de balanza del grupo. */
 function formatSectorHa(value){
   return Number(value).toLocaleString('en-US',{maximumFractionDigits:6});
 }
@@ -225,9 +219,14 @@ function renderSectoresArandano(){
         sectoresDeVariedad.forEach(s=>{
           const share = supSum>0 ? s.superficie/supSum : 0;
           const kgPptoSector = kgPptoTotal * share;
-          const kgRealSector = kgRealTotal * share;
+          const sectorId = value => String(value ?? '').trim().toUpperCase().replace(/^S(?:ECTOR)?\s*0*/, '').replace(/^0+(?=\d)/, '');
+          const records = balanza.filter(r => String(r.lote)===lote && r.red===red && r.variedad===v);
+          // A group total cannot be presented as measured sector production.
+          const identified = records.length>0 && records.every(r=>r.sector!=null && String(r.sector).trim()!=='');
+          const sectorRecords = records.filter(r=>sectorId(r.sector)===sectorId(s.sector));
+          const kgRealSector = identified && sectorRecords.length ? sectorRecords.reduce((sum,r)=>sum+r.kg,0) : null;
           const kgHaPptoSector = s.superficie>0 ? kgPptoSector/s.superficie : 0;
-          const kgHaRealSector = s.superficie>0 ? kgRealSector/s.superficie : 0;
+          const kgHaRealSector = kgRealSector!=null && s.superficie>0 ? kgRealSector/s.superficie : null;
           // % vs la meta del Lote-Red-Variedad completo (kgHaPpto), no el Kg Ppto/Ha
           // prorrateado de ESTE sector (que se cancela matemáticamente contra el real y
           // siempre daría el mismo % en todos los sectores).
@@ -236,10 +235,10 @@ function renderSectoresArandano(){
           filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
             <td class="num">${formatSectorHa(s.superficie)}</td>
             <td class="num">${e ? fmt(kgPptoSector) : '—'}</td>
-            <td class="num">${fmt(kgRealSector)}</td>
+            <td class="num">${kgRealSector!=null ? fmt(kgRealSector) : '—'}</td>
             <td class="num">${e ? fmt(kgHaPptoSector) : '—'}</td>
-            <td class="num">${s.superficie>0 ? fmt(kgHaRealSector) : '—'}</td>
-            <td>${s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
+            <td class="num">${kgHaRealSector!=null ? fmt(kgHaRealSector) : '—'}</td>
+            <td>${kgRealSector==null ? 'Sin kilos por sector' : s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
             <td class="num">${pct(share)}</td></tr>`);
         });
       });

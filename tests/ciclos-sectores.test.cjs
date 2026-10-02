@@ -81,3 +81,22 @@ test('sectores muestra hectáreas pequeñas y no calcula rendimiento sin área',
   assert.match(html,/179/);
   assert.match(html,/Sin hectáreas/);
 });
+
+test('rendimiento sectorial usa kilos identificados y no prorratea la balanza',()=>{
+  const {run,elements}=app();
+  run(`computeSectorDetailsArandano=()=>[
+    {lote:8,red:'R01',sector:'1',variedad:'VENTURA',superficie:2},
+    {lote:8,red:'R01',sector:'2',variedad:'VENTURA',superficie:4}
+  ];
+  balanza=[{lote:8,red:'R01',sector:'S01',variedad:'VENTURA',kg:100},
+    {lote:8,red:'R01',sector:'S02',variedad:'VENTURA',kg:800}];
+  renderSectoresArandano();`);
+  let html=elements.get('tableSectores').innerHTML;
+  const rows=html.split('<tr>');
+  assert.ok(rows.find(r=>r.includes('R01 1')).includes('>50</td>'));
+  assert.ok(rows.find(r=>r.includes('R01 2')).includes('>200</td>'));
+  run('balanza.forEach(r=>delete r.sector);renderSectoresArandano();');
+  html=elements.get('tableSectores').innerHTML;
+  assert.equal((html.match(/Sin kilos por sector/g)||[]).length,2);
+  assert.match(html,/>900<\/td>/);
+});
