@@ -483,3 +483,6 @@ body.theme-arandano #chartVariedad { display:none !important; }
 .variety-amount { font-size:14px; }
 .variety-track { height:8px; background:#f0edf6; }
 .variety-track span { background-image:linear-gradient(90deg,#ffffff28,transparent)!important; }
+
+.sector-calculation-note { display:none; }
+body.theme-arandano .sector-calculation-note { display:block; color:#756984; font-size:12px; line-height:1.5; margin:0 0 12px; }

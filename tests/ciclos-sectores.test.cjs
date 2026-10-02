@@ -66,3 +66,18 @@ test('pantalla paginada sin Túnel y exportación completa con Túnel',()=>{
   assert.equal(run('exported[0][4]'),'Tunel');
   assert.equal(run('exported.every(r=>r.length===11)'),true);
 });
+
+test('sectores muestra hectáreas pequeñas y no calcula rendimiento sin área',()=>{
+  const {run,elements}=app();
+  run(`computeSectorDetailsArandano=()=>[
+    {lote:8,red:'R01',sector:'19',variedad:'FALCON',superficie:0.028},
+    {lote:8,red:'R01',sector:'20',variedad:'SIN AREA',superficie:0}
+  ];
+  balanza=[{lote:8,red:'R01',variedad:'FALCON',kg:5},
+    {lote:8,red:'R01',variedad:'SIN AREA',kg:10}];
+  renderSectoresArandano();`);
+  const html=elements.get('tableSectores').innerHTML;
+  assert.match(html,/0\.028/);
+  assert.match(html,/179/);
+  assert.match(html,/Sin hectáreas/);
+});

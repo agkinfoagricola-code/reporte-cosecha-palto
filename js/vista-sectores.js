@@ -160,6 +160,9 @@ function renderSectores(){
    todavía no tiene bines cargados. El mismo % se aplica al Kg Real de balanza. Si en el futuro
    se carga un comparativo de jabas por sector, se puede agregar acá un fallback igual al de
    shareBinesPorLoteRed() en Palto. */
+function formatSectorHa(value){
+  return Number(value).toLocaleString('en-US',{maximumFractionDigits:6});
+}
 function renderSectoresArandano(){
   const fLote = document.getElementById('f5-lote').value;
   const fRed = document.getElementById('f5-red').value;
@@ -211,12 +214,12 @@ function renderSectoresArandano(){
 
         filas.push(`<tr style="background:#EEF3EE; font-weight:600;">
           <td colspan="2">Total Lote ${lote} - ${red} - ${v}</td>
-          <td class="num">${fmt1(haTotal)}</td>
+          <td class="num">${formatSectorHa(haTotal)}</td>
           <td class="num">${e ? fmt(kgPptoTotal) : '—'}</td>
           <td class="num">${fmt(kgRealTotal)}</td>
           <td class="num">${e ? fmt(kgHaPpto) : '—'}</td>
-          <td class="num">${fmt(kgHaReal)}</td>
-          <td>${e ? estadoPill(cump) : 'Sin presupuesto'}</td>
+          <td class="num">${haTotal>0 ? fmt(kgHaReal) : '—'}</td>
+          <td>${haTotal<=0 ? 'Sin hectáreas' : e ? estadoPill(cump) : 'Sin presupuesto'}</td>
           <td class="num">100%</td></tr>`);
 
         sectoresDeVariedad.forEach(s=>{
@@ -231,12 +234,12 @@ function renderSectoresArandano(){
           const ratioSector = kgHaPpto>0 ? kgHaRealSector/kgHaPpto : 0;
 
           filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
-            <td class="num">${fmt1(s.superficie)}</td>
+            <td class="num">${formatSectorHa(s.superficie)}</td>
             <td class="num">${e ? fmt(kgPptoSector) : '—'}</td>
             <td class="num">${fmt(kgRealSector)}</td>
             <td class="num">${e ? fmt(kgHaPptoSector) : '—'}</td>
-            <td class="num">${fmt(kgHaRealSector)}</td>
-            <td>${e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
+            <td class="num">${s.superficie>0 ? fmt(kgHaRealSector) : '—'}</td>
+            <td>${s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
             <td class="num">${pct(share)}</td></tr>`);
         });
       });

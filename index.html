@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231B6B3C'/%3E%3Ctext x='16' y='22' font-family='Arial, sans-serif' font-weight='700' font-size='18' fill='%23ffffff' text-anchor='middle'%3ERP%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=20261002-reportes-v5">
+<link rel="stylesheet" href="css/styles.css?v=20261002-reportes-v6">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -239,7 +239,8 @@
     </div>
     <div class="panel">
       <h3>Detalle por Lote-Red-Sector</h3>
-      <div class="tablewrap"><table id="tableSectores"></table></div>
+      <div class="tablewrap"><p class="sector-calculation-note">Kg real/Ha = kilos reales ÷ hectáreas, sin redondear. Los kilos por sector se reparten según su área dentro del Lote–Red–Variedad; no son pesajes individuales del sector.</p>
+        <table id="tableSectores"></table></div>
       <div id="sectoresPager" style="display:flex; align-items:center; justify-content:center; gap:12px; padding-top:14px; font-family:var(--font-mono); font-size:12.5px;"></div>
     </div>
   </section>
@@ -520,27 +521,27 @@
 
 <!-- ============ Módulos de la app (orden importa: cada uno usa funciones/variables
      definidas por los anteriores, ya que comparten el scope global del documento) ============ -->
-<script src="js/data-seed.js?v=20261002-reportes-v5"></script>
-<script src="js/data-defaults.js?v=20261002-reportes-v5"></script>
-<script src="js/supabase-client.js?v=20261002-reportes-v5"></script>
-<script src="js/utils.js?v=20261002-reportes-v5"></script>
-<script src="js/state.js?v=20261002-reportes-v5"></script>
-<script src="js/charts.js?v=20261002-reportes-v5"></script>
-<script src="js/filters.js?v=20261002-reportes-v5"></script>
-<script src="js/data-store.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-dashboard.js?v=20261002-reportes-v5"></script>
-<script src="js/reportes-produccion.js?v=20261002-reportes-v5"></script>
-<script src="js/ciclos-referencia.js?v=20261002-reportes-v5"></script>
-<script src="js/calculos-avance-ha.js?v=20261002-reportes-v5"></script>
-<script src="js/calculos-bines.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-avance.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-sectores.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-ciclo.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-calibres.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-cosechadores.js?v=20261002-reportes-v5"></script>
-<script src="js/vista-kg-jornal-lote.js?v=20261002-reportes-v5"></script>
-<script src="js/carga-datos.js?v=20261002-reportes-v5"></script>
-<script src="js/app.js?v=20261002-reportes-v5"></script>
-<script src="js/auth.js?v=20261002-reportes-v5"></script>
+<script src="js/data-seed.js?v=20261002-reportes-v6"></script>
+<script src="js/data-defaults.js?v=20261002-reportes-v6"></script>
+<script src="js/supabase-client.js?v=20261002-reportes-v6"></script>
+<script src="js/utils.js?v=20261002-reportes-v6"></script>
+<script src="js/state.js?v=20261002-reportes-v6"></script>
+<script src="js/charts.js?v=20261002-reportes-v6"></script>
+<script src="js/filters.js?v=20261002-reportes-v6"></script>
+<script src="js/data-store.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-dashboard.js?v=20261002-reportes-v6"></script>
+<script src="js/reportes-produccion.js?v=20261002-reportes-v6"></script>
+<script src="js/ciclos-referencia.js?v=20261002-reportes-v6"></script>
+<script src="js/calculos-avance-ha.js?v=20261002-reportes-v6"></script>
+<script src="js/calculos-bines.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-avance.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-sectores.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-ciclo.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-calibres.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-cosechadores.js?v=20261002-reportes-v6"></script>
+<script src="js/vista-kg-jornal-lote.js?v=20261002-reportes-v6"></script>
+<script src="js/carga-datos.js?v=20261002-reportes-v6"></script>
+<script src="js/app.js?v=20261002-reportes-v6"></script>
+<script src="js/auth.js?v=20261002-reportes-v6"></script>
 </body>
 </html>
