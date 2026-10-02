@@ -54,7 +54,7 @@ function readTareoWorkbook(file){
           let rows = null;
           for(const range of [0,1,2]){
             const candidate = XLSX.utils.sheet_to_json(ws, {defval:'', range});
-            if(candidate.length && findKey(candidate[0], ['FECHA','Fecha']) && findKey(candidate[0], ['CODIGO','Codigo'])){
+            if(candidate.length && findKey(candidate[0], ['FECHA','Fecha']) && findKey(candidate[0], ['CODIGO','Codigo','CodOperario'])){
               rows = candidate;
               break;
             }
@@ -338,25 +338,53 @@ function parseHectareasRows(rows){
 // NOMBRE TRABAJADOR, COD-LAB, HRS.TRAB.), pero solo conserva el código de cosecha de Arándano
 // (ver TAREO_COSECHADOR_CODES_ARANDANO = 5129 ARA-COSECHADOR), que es uno solo — a diferencia
 // de Palto no hay split Hass/Poli por variedad.
+// El tareo moderno expresa tramos de labor; no repetir totHoras por cada tramo.
+function minutosHoraTareo(v){
+  if(v instanceof Date) return v.getHours()*60 + v.getMinutes() + v.getSeconds()/60;
+  if(typeof v === 'number' && v >= 0 && v < 1) return v*1440;
+  const m = String(v ?? '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if(!m || +m[1]>23 || +m[2]>59 || +(m[3]||0)>59) return null;
+  return +m[1]*60 + +m[2] + +(m[3]||0)/60;
+}
 function parseTareoArandanoRows(rows){
   if(!rows.length) return [];
   const sample = rows[0];
   const kFecha = findKey(sample, ['FECHA','Fecha']);
-  const kCodigo = findKey(sample, ['CODIGO','Codigo']);
-  const kCodLab = findKey(sample, ['COD-LAB','COD LAB','CodLab']);
+  const kCodigo = findKey(sample, ['CODIGO','Codigo','CodOperario']);
+  const kCodLab = findKey(sample, ['COD-LAB','COD LAB','CodLab','CodLabor']);
   const kHoras = findKey(sample, ['HRS.TRAB.','HRS TRAB','HRS.TRAB','Horas']);
-  if(!kFecha || !kCodigo || !kCodLab) throw new Error('Faltan columnas esperadas en el archivo de tareo de Arándano (FECHA, CODIGO, COD-LAB).');
-  const out = [];
-  for(const r of rows){
-    if(r[kCodigo] === '' || r[kCodigo] == null) continue;
-    const codlab = parseInt(String(r[kCodLab]).replace(/[^0-9]/g,''));
-    if(!TAREO_COSECHADOR_CODES_ARANDANO.has(codlab)) continue;
-    const codigo = parseInt(String(r[kCodigo]).replace(/[^0-9]/g,''));
-    if(!codigo) continue;
-    let horas = kHoras ? parseFloat(r[kHoras]) : NaN;
-    if(isNaN(horas)) horas = 8;
-    out.push({ fecha: formatDateCell(r[kFecha]), codigo, codlab, horas });
-  }
+  const kInicio = findKey(sample, ['HORA_INI_LAB']);
+  const kFin = findKey(sample, ['HORA_FIN_LAB']);
+  const moderno = !!findKey(sample, ['CodOperario']);
+  if(!kFecha || !kCodigo || !kCodLab) throw new Error('Faltan fecha, código de trabajador o código de labor en el tareo.');
+  if(moderno && (!kInicio || !kFin)) throw new Error('El tareo individual requiere HORA_INI_LAB y HORA_FIN_LAB.');
+  const out = [], seen = new Set();
+  rows.forEach((r,index)=>{
+    if(r[kCodigo] === '' || r[kCodigo] == null || !r[kFecha]) return;
+    const codlab = Number(r[kCodLab]);
+    if(![5129,5014,5132,5137].includes(codlab)) return;
+    const codigo = Number(r[kCodigo]);
+    if(!codigo) return;
+    const fecha = formatDateCell(r[kFecha]);
+    let horas;
+    const record = {fecha,codigo,codlab};
+    if(moderno){
+      const inicio = minutosHoraTareo(r[kInicio]), fin = minutosHoraTareo(r[kFin]);
+      if(inicio == null || fin == null || fin < inicio) throw new Error(`Horario inválido en tareo, fila de datos ${index+1}. Revisa inicio y fin de labor.`);
+      horas = (fin-inicio)/60;
+      Object.assign(record,{horasFormato:'decimal',inicioMin:inicio,finMin:fin,
+        grupo:String(r[findKey(sample,['CodGrupo'])] || ''),
+        ubicacion:String(r[findKey(sample,['SubLote'])] || ''),
+        variedad:String(r[findKey(sample,['VARIEDAD'])] || '').trim().toUpperCase()});
+      const key = JSON.stringify([fecha,codigo,codlab,inicio,fin,record.grupo,record.ubicacion]);
+      if(seen.has(key)) return;
+      seen.add(key);
+    } else {
+      horas = kHoras ? parseFloat(r[kHoras]) : 8;
+      if(!Number.isFinite(horas) || horas<0) throw new Error(`Horas inválidas en tareo, fila de datos ${index+1}.`);
+    }
+    out.push({...record,horas});
+  });
   return out;
 }
 
@@ -634,7 +662,7 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
         rows = rows.concat(await readTareoWorkbook(fileTareoAraList[i]));
       }
       const parsed = parseTareoArandanoRows(rows);
-      if(!parsed.length) throw new Error('El/los Excel de tareo de Arándano no tienen filas válidas para el código 5129 (ARA-COSECHADOR).');
+      if(!parsed.length) throw new Error('El/los Excel de tareo de Arándano no tienen filas válidas de cosechadores, líderes o supervisores.');
       const merged = mergeTareoByDate(tareoArandano, parsed);
       const { error } = await sb.from('tareo_arandano_data').update({ data: merged, updated_by: currentUser.email }).eq('id', 1);
       if(error) throw new Error(error.message);

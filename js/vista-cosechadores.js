@@ -58,7 +58,7 @@ function jornalesPorDia(){
   for(const r of tareo){
     if(!TAREO_COSECHADOR_CODES.has(r.codlab)) continue;
     if(!codlabAllowedByVariedadFilter(r.codlab)) continue;
-    const h = horasDecimalesTareo(r.horas); // hh.mm -> horas decimales
+    const h = r.horasFormato === 'decimal' ? r.horas : horasDecimalesTareo(r.horas);
     horasPorFecha[r.fecha] = (horasPorFecha[r.fecha]||0) + h;
   }
   const out = {};
@@ -215,7 +215,7 @@ function jornalesPorDiaArandano(){
   const horasPorFecha = {};
   for(const r of tareoArandano){
     if(!TAREO_COSECHADOR_CODES_ARANDANO.has(r.codlab)) continue;
-    const h = horasDecimalesTareo(r.horas); // hh.mm -> horas decimales
+    const h = r.horasFormato === 'decimal' ? r.horas : horasDecimalesTareo(r.horas);
     horasPorFecha[r.fecha] = (horasPorFecha[r.fecha]||0) + h;
   }
   const out = {};
