@@ -111,14 +111,14 @@ function renderProductionKPIs(){
 }
 function productionChart(id,labels,values,{horizontal=false,dates=false}={}){
   if(charts[id]) charts[id].destroy();
-  const colors = horizontal ? values.map((_,i)=>PRODUCTION_PALETTE[i%PRODUCTION_PALETTE.length]) : '#7951bc';
-  const datasets = [{type:'bar',label:'Kg cosechados',data:values,backgroundColor:colors,borderRadius:2,borderSkipped:false,maxBarThickness:horizontal?25:7,order:2}];
+  const colors = horizontal ? values.map((_,i)=>PRODUCTION_PALETTE[i%PRODUCTION_PALETTE.length]) : '#603594';
+  const datasets = [{type:'bar',label:'Kg cosechados',data:values,backgroundColor:colors,borderRadius:2,borderSkipped:false,maxBarThickness:horizontal?25:undefined,categoryPercentage:1,barPercentage:0.84,order:2}];
   charts[id] = new Chart(document.getElementById(id).getContext('2d'),{
     type:'bar', data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},layout:{padding:{top:12,right:12}},indexAxis:horizontal?'y':'x',
       plugins:{legend:{display:false,position:'top',labels:{boxWidth:12,boxHeight:12,padding:16,font:{size:11}}},tooltip:{backgroundColor:'#302444',padding:12,cornerRadius:8,displayColors:false,callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(horizontal?ctx.parsed.x:ctx.parsed.y)+' kg',title:items=>dates ? prodDate(items[0].label) : items[0].label}}},
       scales:{x:horizontal?{beginAtZero:true,border:{display:false},grid:{color:'#edf0f5'},ticks:{maxTicksLimit:6,callback:v=>fmt(v)}}:
-        {border:{display:false},grid:{display:false},ticks:{autoSkip:true,maxTicksLimit:Math.max(3,Math.min(12,Math.floor(document.getElementById(id).parentElement.clientWidth/65))),minRotation:dates?45:0,maxRotation:dates?45:0,padding:8,font:{size:11},callback:function(v){const d=this.getLabelForValue(v);return dates?prodDate(d):d;}}},
+        {border:{display:false},grid:{display:false},ticks:{autoSkip:true,maxTicksLimit:Math.max(3,Math.min(26,Math.floor(document.getElementById(id).parentElement.clientWidth/29))),minRotation:dates?55:0,maxRotation:dates?55:0,padding:3,font:{size:10},callback:function(v){const d=this.getLabelForValue(v);return d;}}},
         y:horizontal?{border:{display:false},grid:{display:false},ticks:{autoSkip:false}}:{beginAtZero:true,border:{display:false},grid:{color:'#edf0f5'},ticks:{maxTicksLimit:6,callback:v=>fmt(v)}}}}
   });
 }
