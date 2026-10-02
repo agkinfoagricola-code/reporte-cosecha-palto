@@ -97,7 +97,7 @@ test('rendimiento sectorial usa kilos identificados y no prorratea la balanza',(
   assert.ok(rows.find(r=>r.includes('R01 2')).includes('>200</td>'));
   run('balanza.forEach(r=>delete r.sector);renderSectoresArandano();');
   html=elements.get('tableSectores').innerHTML;
-  assert.equal((html.match(/Sin kilos o lecturas coincidentes/g)||[]).length,2);
+  assert.doesNotMatch(html,/Asignado según/);
   assert.match(html,/>900<\/td>/);
 });
 
@@ -116,4 +116,14 @@ test('distribuye kilos por jabas de la misma fecha y mercado sin inventar histó
   assert.equal(run("sectorKgFromReadings(balanza,'1')"),380);
   assert.equal(run("sectorKgFromReadings(balanza,'2')"),720);
   assert.equal(run("sectorKgFromReadings(balanza,'3')"),null);
+});
+
+test('histórico recupera sectores de lote 5 y lecturas nuevas sustituyen el grupo',()=>{
+  const {run}=app();
+  run(fs.readFileSync(path.join(__dirname,'../js/sectores-historico.js'),'utf8'));
+  run(`const old=SECTORES_HISTORICO.find(r=>r.lote===5 && r.sector==='1');
+    balanza=[{...old,kgExportable:100,kgNacional:100}];`);
+  assert.ok(run("sectorKgFromReadings(balanza,'1')")>0);
+  run(`sectorReadings=aggregateSectorReadings([{...old,sector:'2',cantidad:10}]);`);
+  assert.equal(run("sectorKgFromReadings(balanza,'2')")>=100,true);
 });

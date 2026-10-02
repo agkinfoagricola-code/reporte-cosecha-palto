@@ -156,6 +156,7 @@ function renderSectores(){
    identificado. Los totales conservan los kilos de balanza del grupo. */
 
 let sectorReadings = null;
+let sectorHistory = null;
 let sectorReadingsLoading = false;
 let sectorReadingsError = false;
 const normalizeSectorId = value => String(value ?? '').trim().toUpperCase().replace(/^S(?:ECTOR)?\s*0*/, '').replace(/^0+(?=\d)/, '');
@@ -186,12 +187,14 @@ async function loadSectorReadings(){
 }
 function sectorKgFromReadings(records,sector){
   let kg=0,matched=false;
-  if(!sectorReadings) return null;
+  if(!sectorHistory) sectorHistory = aggregateSectorReadings(typeof SECTORES_HISTORICO==='undefined' ? [] : SECTORES_HISTORICO);
   records.forEach(r=>{
     ['EXP','NAC'].forEach(market=>{
       const kilos = r[market==='EXP'?'kgExportable':'kgNacional'];
       if(kilos==null || !Number.isFinite(Number(kilos))) return;
-      const counts=sectorReadings.get([r.fecha,r.lote,r.red,r.variedad,market].join('|'));
+      const key=[r.fecha,r.lote,r.red,r.variedad,market].join('|');
+      // Current readings replace the whole historical group, never add to it.
+      const counts=sectorReadings?.get(key) || sectorHistory.get(key);
       if(!counts?.has(normalizeSectorId(sector))) return;
       const total=[...counts.values()].reduce((sum,n)=>sum+n,0);
       kg+=Number(kilos)*counts.get(normalizeSectorId(sector))/total;
@@ -283,10 +286,10 @@ function renderSectoresArandano(){
           filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
             <td class="num">${formatSectorHa(s.superficie)}</td>
             <td class="num">${e ? fmt(kgPptoSector) : '—'}</td>
-            <td class="num">${kgRealSector!=null ? fmt(kgRealSector)+(estimated?' *':'') : '—'}</td>
+            <td class="num" title="${estimated ? 'Asignado según participación sectorial del histórico o de las lecturas de la misma fecha y mercado' : ''}">${kgRealSector!=null ? fmt(kgRealSector)+(estimated?' *':'') : '—'}</td>
             <td class="num">${e ? fmt(kgHaPptoSector) : '—'}</td>
             <td class="num">${kgHaRealSector!=null ? fmt(kgHaRealSector)+(estimated?' *':'') : '—'}</td>
-            <td>${kgRealSector==null ? (sectorReadingsLoading ? 'Cargando lecturas…' : sectorReadingsError ? 'Error al consultar lecturas' : 'Sin kilos o lecturas coincidentes') : s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
+            <td>${kgRealSector==null ? '—' : s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
             <td class="num">${pct(share)}</td></tr>`);
         });
       });
