@@ -71,3 +71,7 @@ La versión de diagnóstico identifica si falló autenticación, lectura o guard
 Los bloques se guardan temporalmente; la web cambia solo cuando se confirma el lote completo. Si se corta la conexión o la confirmación devuelve un error, el programa se pausa y conserva pending.json y pending-payload.json.gz. No los borre: contienen el identificador y los datos del mismo envío; reiniciar permite reanudarlo y consultar su confirmación sin duplicar la carga. Si se informa un conflicto, conserve los archivos y solicite revisión antes de reanudar. Los lotes temporales remotos tienen retención de siete días.
 
 Un HTTP 520 no demuestra que una transacción falló: la respuesta puede perderse después del guardado. La nueva confirmación es idempotente. Mantiene cada lectura individual y sus etiquetas; no elimina ni resume las jabas para reducir el tamaño. Los archivos pendientes contienen datos de trabajadores y deben permanecer privados, igual que los backups.
+
+## Bloques enviados, pero confirmación 57014
+
+Si terminó de enviar todos los bloques y la confirmación falla con 57014 alrededor de los 15 segundos, ejecute `AJUSTAR_TIEMPO.sql` en Supabase SQL Editor. Establece 60 segundos solo para la función RPC de confirmación y recarga su configuración en PostgREST. No amplía el límite de todas las consultas ni modifica datos. Conserve los archivos pending y abra INICIAR.cmd de nuevo: reintenta la confirmación del mismo lote. Si vuelve a agotar el tiempo, no borre los pendientes; comunique el registro para revisar rendimiento antes de nuevos intentos.

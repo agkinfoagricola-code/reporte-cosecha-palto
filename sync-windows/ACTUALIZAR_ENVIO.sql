@@ -73,6 +73,10 @@ begin
  delete from public.produccion_sync_parts where request_id=p_id;
  return versions;
 end $$;
+-- PostgREST aplica este límite solo a la RPC de confirmación.
+-- El límite de 15 s por defecto no alcanza para reconstruir y guardar el lote grande.
+alter function public.sync_produccion_commit(uuid) set statement_timeout = '60s';
+notify pgrst, 'reload schema';
 revoke all on function public.sync_produccion_stage(uuid,integer,integer,text,text) from public,anon;
 revoke all on function public.sync_produccion_commit(uuid) from public,anon;
 grant execute on function public.sync_produccion_stage(uuid,integer,integer,text,text) to authenticated;
