@@ -114,13 +114,9 @@ function productionChart(id,labels,values,{horizontal=false,dates=false}={}){
   const colors = horizontal ? values.map((_,i)=>PRODUCTION_PALETTE[i%PRODUCTION_PALETTE.length]) : '#7951bc';
   const datasets = [{type:'bar',label:'Kg cosechados',data:values,backgroundColor:colors,borderRadius:3,borderSkipped:false,maxBarThickness:horizontal?25:28,order:2}];
   if(dates){
-    const trend = values.map((_,i)=>{
-      const window = values.slice(Math.max(0,i-6),i+1);
-      return window.reduce((sum,kg)=>sum+kg,0)/window.length;
-    });
-    datasets.push({type:'line',label:'Tendencia · promedio de 7 jornadas',data:trend,
+    datasets.push({type:'line',label:'Evolución diaria de kilos',data:values,
       borderColor:'#147d92',backgroundColor:'#147d92',borderWidth:2.5,
-      pointRadius:0,pointHoverRadius:4,tension:0.25,fill:false,order:1});
+      pointRadius:2,pointHoverRadius:4,tension:0,fill:false,order:1});
   }
   charts[id] = new Chart(document.getElementById(id).getContext('2d'),{
     type:'bar', data:{labels,datasets},
