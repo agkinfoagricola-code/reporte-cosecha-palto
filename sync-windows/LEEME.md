@@ -7,7 +7,7 @@ Este programa lee los Excel locales y actualiza el Supabase que ya utiliza la we
 1. Descargue y extraiga **toda** esta carpeta en `D:\SincronizadorProduccion`. No ejecute los archivos desde el ZIP.
 2. Instale Python 3.11 o superior desde https://www.python.org/downloads/windows/ (incluya el lanzador Python).
 3. Abra `INSTALAR.cmd`. Se instala openpyxl en un entorno privado `.venv`.
-4. En el proyecto Supabase de la web, abra **SQL Editor → New query**, pegue el contenido completo de `supabase_sync.sql` y pulse **Run**. Requiere acceso de propietario al proyecto, una sola vez. Agrega almacenamiento de lecturas y funciones de sincronización; no borra las tablas existentes ni cambia los datos de Palto. Si falla, guarde el mensaje y no continúe hasta resolverlo.
+4. En el proyecto Supabase de la web, abra **SQL Editor → New query**, pegue el contenido completo de `supabase_sync.sql` y pulse **Run**. Después ejecute también `ACTUALIZAR_ENVIO.sql`. Requiere acceso de propietario al proyecto, una sola vez. Agrega almacenamiento de lecturas y funciones de sincronización; no borra las tablas existentes ni cambia los datos de Palto. Si falla, guarde el mensaje y no continúe hasta resolverlo.
 5. Verifique que su usuario de la web ya tenga rol `admin`. No copie contraseñas ni claves `service_role` en archivos ni en el chat.
 6. Ponga estos cuatro archivos, con estos nombres exactos, en `D:\Reporte de Produccion`:
    - `balanza.xlsx`
@@ -60,3 +60,14 @@ Los parsers y la sincronización se prueban con datos de ejemplo, respuestas sim
 ## Error al iniciar (HTTP 500)
 
 La versión de diagnóstico identifica si falló autenticación, lectura o guardado y muestra el código de Supabase sin revelar contraseñas. Para actualizar un sincronizador instalado, cierre su ventana y copie solamente `sync.py` de la descarga nueva sobre el existente; conserve `config.json`, `state.json`, `.venv` y `backups`. Abra `INICIAR.cmd` y comunique la línea de error con su código. `DIAGNOSTICO.sql` es una consulta de solo lectura para el SQL Editor si se necesita investigar. No vuelva a instalar ni cambie permisos de la base de datos sin identificar la causa.
+
+## Actualización por error HTTP 520 al guardar
+
+1. Detenga el programa (Ctrl+C) y cierre la ventana.
+2. Reemplace **solo `sync.py`** con el archivo nuevo; conserve config.json, state.json y backups.
+3. Ejecute **ACTUALIZAR_ENVIO.sql** en el SQL Editor del mismo proyecto Supabase. Es necesario una sola vez para agregar transporte por bloques. No borra los datos existentes.
+4. Abra INICIAR.cmd. Verá «Validando», «Enviado bloque X de Y», «Confirmando» y finalmente «Actualizado».
+
+Los bloques se guardan temporalmente; la web cambia solo cuando se confirma el lote completo. Si se corta la conexión o la confirmación devuelve un error, el programa se pausa y conserva pending.json y pending-payload.json.gz. No los borre: contienen el identificador y los datos del mismo envío; reiniciar permite reanudarlo y consultar su confirmación sin duplicar la carga. Si se informa un conflicto, conserve los archivos y solicite revisión antes de reanudar. Los lotes temporales remotos tienen retención de siete días.
+
+Un HTTP 520 no demuestra que una transacción falló: la respuesta puede perderse después del guardado. La nueva confirmación es idempotente. Mantiene cada lectura individual y sus etiquetas; no elimina ni resume las jabas para reducir el tamaño. Los archivos pendientes contienen datos de trabajadores y deben permanecer privados, igual que los backups.

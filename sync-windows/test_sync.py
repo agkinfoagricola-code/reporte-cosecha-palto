@@ -105,13 +105,13 @@ class TransportTest(unittest.TestCase):
     def test_success_is_saved_and_unchanged_files_not_uploaded(self):
         from unittest.mock import Mock
         versions = {t:'new' for t in parsers.TABLES}
-        api = Mock();api.request.side_effect = [self.snapshot,versions]
+        api = Mock();api.request.side_effect = [self.snapshot,{'received':0},versions]
         with patch.object(sync,'BASE',self.root), patch.object(sync,'collect',return_value=(self.hashes,self.parsed)):
             result = sync.run_once(api,self.config,{})
             self.assertEqual(result['versions'],versions)
             self.assertEqual(json.loads((self.root/'state.json').read_text())['files'],self.hashes)
             sync.run_once(api,self.config,result)
-        self.assertEqual(api.request.call_count,2)
+        self.assertEqual(api.request.call_count,3)
 
 if __name__ == '__main__':
     unittest.main()
@@ -138,3 +138,45 @@ class DiagnosticTest(unittest.TestCase):
         with patch('urllib.request.urlopen',side_effect=error):
             with self.assertRaisesRegex(RuntimeError,'inicio de sesión.*unexpected_failure'):
                 api.request('/auth/v1/token?grant_type=password',{},False)
+
+class ChunkTest(unittest.TestCase):
+    def test_lost_confirmation_resumes_without_reuploading(self):
+        from unittest.mock import Mock
+        import gzip,hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            payload=json.dumps({'table':'á'*100})
+            with gzip.open(root/'pending-payload.json.gz','wt',encoding='utf-8') as f: f.write(payload)
+            sync.save_json(root/'pending.json',{'id':'job','hash':hashlib.md5(payload.encode()).hexdigest(),
+                'next_part':0,'files':{'test':'hash'},'previous_versions':{},'changed':['test']})
+            count=(len(payload)+49)//50
+            api=Mock();api.request.side_effect=[{'received':i} for i in range(count)]+[RuntimeError('HTTP 520')]
+            with patch.object(sync,'BASE',root),patch.object(sync,'CHUNK_CHARS',50):
+                with self.assertRaises(RuntimeError): sync.send_pending(api)
+                self.assertFalse((root/'state.json').exists())
+                self.assertEqual(json.loads((root/'pending.json').read_text())['next_part'],count)
+                api=Mock();api.request.return_value={'table':'server-hash'}
+                result=sync.send_pending(api)
+                self.assertEqual(api.request.call_count,1)
+                self.assertEqual(api.request.call_args.args[0],'/rest/v1/rpc/sync_produccion_commit')
+                self.assertEqual(result['versions'],{'table':'server-hash'})
+                self.assertFalse((root/'pending.json').exists())
+
+    def test_staging_is_bounded_and_preserves_all_content(self):
+        from unittest.mock import Mock
+        import gzip,hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); payload=json.dumps({'datos':['áéí雪'*100]*4},ensure_ascii=False)
+            with gzip.open(root/'pending-payload.json.gz','wt',encoding='utf-8') as f: f.write(payload)
+            sync.save_json(root/'pending.json',{'id':'job','hash':hashlib.md5(payload.encode()).hexdigest(),
+                'next_part':0,'files':{},'previous_versions':{},'changed':['test']})
+            captured=[]
+            def request(path,body):
+                if 'stage' in path:
+                    captured.append(body['p_text']);return {'received':body['p_index']}
+                return {'table':'ok'}
+            api=Mock();api.request.side_effect=request
+            with patch.object(sync,'BASE',root),patch.object(sync,'CHUNK_CHARS',50):
+                sync.send_pending(api)
+            self.assertTrue(all(len(c)<=50 for c in captured))
+            self.assertEqual(''.join(captured),payload)

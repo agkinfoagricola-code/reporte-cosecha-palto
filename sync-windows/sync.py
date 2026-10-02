@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 import sys
 import time
+import uuid
 import urllib.request
 import urllib.error
 from parsers import FILES, TABLES, read, merge, apply_jabas
@@ -44,7 +45,7 @@ class API:
         headers = {'apikey':self.key, 'Content-Type':'application/json'}
         if authenticated:
             headers['Authorization'] = 'Bearer ' + self.token
-        req = urllib.request.Request(self.url + path, json.dumps(body).encode(), headers, method='POST')
+        req = urllib.request.Request(self.url + path, json.dumps(body,ensure_ascii=False,separators=(',',':')).encode('utf-8'), headers, method='POST')
         try:
             with urllib.request.urlopen(req, timeout=180) as res:
                 return json.load(res)
@@ -52,7 +53,8 @@ class API:
             # Mostrar etapa y código, nunca el cuerpo completo (puede contener datos).
             stage = ('inicio de sesión' if 'grant_type=password' in path else
                      'renovación de sesión' if '/auth/' in path else
-                     'lectura inicial de Supabase' if 'snapshot' in path else 'guardado de datos')
+                     'lectura inicial de Supabase' if 'snapshot' in path else
+                     'envío de bloque' if 'stage' in path else 'confirmación de datos' if 'commit' in path else 'guardado de datos')
             try:
                 payload = json.loads(e.read(65536))
             except (ValueError, OSError):
@@ -65,7 +67,7 @@ class API:
                 '42P01': 'Falta una tabla requerida. Ejecute el diagnóstico SQL incluido.',
                 '42703': 'Falta una columna requerida. Ejecute el diagnóstico SQL incluido.',
                 '42883': 'Falta una función requerida en Supabase.',
-                'PGRST202': 'No se encontró la función de sincronización. Ejecute supabase_sync.sql en el proyecto correcto.',
+                'PGRST202': 'Falta una función de sincronización. Ejecute supabase_sync.sql y ACTUALIZAR_ENVIO.sql en el proyecto correcto.',
                 '42501': 'El usuario no tiene permiso o su perfil no tiene rol admin.',
                 '40001': 'Conflicto con una carga reciente. No se guardó este lote.',
                 '57014': 'Supabase agotó el tiempo de consulta; requiere revisar el volumen de datos.',
@@ -99,7 +101,10 @@ def collect(folder, year):
     if any(time.time()-p.stat().st_mtime < 5 for p in paths):
         raise ValueError('Hay un Excel recién guardado; esperando a que termine la escritura.')
     hashes = {p.name:fingerprint(p) for p in paths}
-    parsed = {t:read(p, year) for p,t in zip(paths,TABLES)}
+    parsed = {}
+    for p,t in zip(paths,TABLES):
+        logging.info('Validando %s…',p.name)
+        parsed[t] = read(p,year)
     for p in paths:
         if before[p.name] != (p.stat().st_size,p.stat().st_mtime_ns) or hashes[p.name] != fingerprint(p):
             raise ValueError('Un archivo cambió durante la lectura; se reintentará sin subir este lote.')
@@ -116,7 +121,44 @@ def prepare(snapshot, parsed, changed):
     return {t:{'version':snapshot[t]['version'],'data':desired[t]} for t in touched}
 
 
+CHUNK_CHARS = 128000
+
+
+def send_pending(api):
+    pending_path = BASE/'pending.json'
+    pending = json.loads(pending_path.read_text(encoding='utf-8'))
+    with gzip.open(BASE/'pending-payload.json.gz','rt',encoding='utf-8') as stream:
+        payload = stream.read()
+    if hashlib.md5(payload.encode('utf-8')).hexdigest() != pending['hash']:
+        raise ValueError('El lote pendiente local cambió. No se enviará; conserve los archivos para revisarlos.')
+    count = (len(payload)+CHUNK_CHARS-1)//CHUNK_CHARS
+    versions = None
+    for i in range(pending['next_part'],count):
+        response = api.request('/rest/v1/rpc/sync_produccion_stage', {
+            'p_id':pending['id'],'p_index':i,'p_count':count,'p_hash':pending['hash'],
+            'p_text':payload[i*CHUNK_CHARS:(i+1)*CHUNK_CHARS]})
+        if response.get('committed'):
+            versions = response['versions']
+            break
+        pending['next_part'] = i+1
+        save_json(pending_path,pending)
+        logging.info('Enviado bloque %s de %s; todavía falta confirmar el lote.',i+1,count)
+    if versions is None:
+        logging.info('Confirmando el lote completo en Supabase…')
+        versions = api.request('/rest/v1/rpc/sync_produccion_commit', {'p_id':pending['id']})
+    new_state = {'files':pending['files'],
+                 'versions':{**pending['previous_versions'],**versions},
+                 'last_success':time.strftime('%Y-%m-%d %H:%M:%S')}
+    save_json(BASE/'state.json',new_state)
+    pending_path.unlink()
+    (BASE/'pending-payload.json.gz').unlink(missing_ok=True)
+    logging.info('Actualizado: %s. Recargue la web para ver los datos.',', '.join(pending['changed']))
+    return new_state
+
+
 def run_once(api, config, state, reconcile=False):
+    if (BASE/'pending.json').exists():
+        return send_pending(api)
     folder = Path(config['folder'])
     current = {f:fingerprint(folder/f) for f in FILES if (folder/f).is_file()}
     if current == state.get('files'):
@@ -134,12 +176,15 @@ def run_once(api, config, state, reconcile=False):
     backup.mkdir(exist_ok=True)
     with gzip.open(backup/(time.strftime('%Y%m%d-%H%M%S')+f'-{time.time_ns()}.json.gz'),'wt',encoding='utf-8') as stream:
         json.dump({t:snapshot[t] for t in changes},stream)
-    versions = api.request('/rest/v1/rpc/sync_produccion_apply', {'changes':changes})
-    new_state = {'files':hashes, 'versions':{**state.get('versions',{}),**versions},
-                 'last_success':time.strftime('%Y-%m-%d %H:%M:%S')}
-    save_json(BASE/'state.json',new_state)
-    logging.info('Actualizado: %s. Recargue la web para ver los datos.', ', '.join(sorted(changed)))
-    return new_state
+    payload = json.dumps(changes,ensure_ascii=False,separators=(',',':'))
+    logging.info('Preparando %.1f MiB en bloques pequeños.',len(payload.encode('utf-8'))/1024/1024)
+    with gzip.open(BASE/'pending-payload.json.gz','wt',encoding='utf-8') as stream:
+        stream.write(payload)
+    save_json(BASE/'pending.json',{'id':str(uuid.uuid4()),
+        'hash':hashlib.md5(payload.encode('utf-8')).hexdigest(),'next_part':0,
+        'files':hashes,'previous_versions':state.get('versions',{}),'changed':sorted(changed)})
+    return send_pending(api)
+
 
 
 def main():
@@ -183,7 +228,8 @@ def main():
             args.reconcile = False
         except Exception as e:
             logging.error('%s',e)
-            if args.once:
+            if args.once or (BASE/'pending.json').exists():
+                logging.error('Envío pausado. Conserve pending.json y pending-payload.json.gz. Al volver a iniciar se reanudará el mismo lote.')
                 raise SystemExit(1)
         if args.once:
             break

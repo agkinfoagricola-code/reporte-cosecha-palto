@@ -5,3 +5,5 @@ state.json
 sync.log
 sync.lock
 backups/
+pending.json
+pending-payload.json.gz
