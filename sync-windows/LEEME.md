@@ -56,3 +56,7 @@ Ejecute `INICIO_AUTOMATICO.cmd`. Crea un acceso directo en Inicio del usuario de
 ## Verificación y límites
 
 Los parsers y la sincronización se prueban con datos de ejemplo, respuestas simuladas y los cuatro Excel proporcionados. La instalación en Windows, el acceso autenticado y las funciones SQL deben validarse en el proyecto real: no se dispone aquí de una cuenta administradora ni se ejecutó la migración remota. No se declara la nube actualizada hasta ver un envío confirmado.
+
+## Error al iniciar (HTTP 500)
+
+La versión de diagnóstico identifica si falló autenticación, lectura o guardado y muestra el código de Supabase sin revelar contraseñas. Para actualizar un sincronizador instalado, cierre su ventana y copie solamente `sync.py` de la descarga nueva sobre el existente; conserve `config.json`, `state.json`, `.venv` y `backups`. Abra `INICIAR.cmd` y comunique la línea de error con su código. `DIAGNOSTICO.sql` es una consulta de solo lectura para el SQL Editor si se necesita investigar. No vuelva a instalar ni cambie permisos de la base de datos sin identificar la causa.

@@ -115,3 +115,26 @@ class TransportTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class DiagnosticTest(unittest.TestCase):
+    def test_recursion_identified_without_exposing_response(self):
+        import io
+        import urllib.error
+        api = sync.API({'supabase_url':'https://example.com','public_key':'public'})
+        api.token='private-token';api.expires=10**15
+        error=urllib.error.HTTPError('https://example.com',500,'error',{},io.BytesIO(
+            b'{"code":"42P17","message":"private contents","details":"secret"}'))
+        with patch('urllib.request.urlopen',side_effect=error):
+            with self.assertRaisesRegex(RuntimeError,'lectura inicial.*42P17') as got:
+                api.request('/rest/v1/rpc/sync_produccion_snapshot',{})
+        self.assertNotIn('private',str(got.exception))
+        self.assertNotIn('secret',str(got.exception))
+
+    def test_auth_stage_is_reported(self):
+        import io
+        import urllib.error
+        api=sync.API({'supabase_url':'https://example.com','public_key':'public'})
+        error=urllib.error.HTTPError('https://example.com',500,'error',{},io.BytesIO(b'{"error_code":"unexpected_failure"}'))
+        with patch('urllib.request.urlopen',side_effect=error):
+            with self.assertRaisesRegex(RuntimeError,'inicio de sesión.*unexpected_failure'):
+                api.request('/auth/v1/token?grant_type=password',{},False)

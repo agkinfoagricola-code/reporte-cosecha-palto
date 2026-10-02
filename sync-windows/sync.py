@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 import sys
 import time
@@ -48,12 +49,31 @@ class API:
             with urllib.request.urlopen(req, timeout=180) as res:
                 return json.load(res)
         except urllib.error.HTTPError as e:
-            # No registrar respuestas de autenticación, cuerpos, JWT ni datos personales.
-            if e.code in (401,403):
-                raise RuntimeError('Acceso rechazado: revise usuario, contraseña y rol admin.') from None
-            if e.code == 409:
-                raise RuntimeError('Conflicto con una carga reciente. No se guardó este lote.') from None
-            raise RuntimeError(f'HTTP {e.code}: compruebe conexión y que ejecutó supabase_sync.sql.') from None
+            # Mostrar etapa y código, nunca el cuerpo completo (puede contener datos).
+            stage = ('inicio de sesión' if 'grant_type=password' in path else
+                     'renovación de sesión' if '/auth/' in path else
+                     'lectura inicial de Supabase' if 'snapshot' in path else 'guardado de datos')
+            try:
+                payload = json.loads(e.read(65536))
+            except (ValueError, OSError):
+                payload = {}
+            code = str(payload.get('code') or payload.get('error_code') or '')
+            if not re.fullmatch(r'[A-Za-z0-9_]{1,64}', code):
+                code = 'sin_codigo'
+            explanations = {
+                '42P17': 'Una política de permisos de Supabase tiene recursión. Revisar las políticas de profiles.',
+                '42P01': 'Falta una tabla requerida. Ejecute el diagnóstico SQL incluido.',
+                '42703': 'Falta una columna requerida. Ejecute el diagnóstico SQL incluido.',
+                '42883': 'Falta una función requerida en Supabase.',
+                'PGRST202': 'No se encontró la función de sincronización. Ejecute supabase_sync.sql en el proyecto correcto.',
+                '42501': 'El usuario no tiene permiso o su perfil no tiene rol admin.',
+                '40001': 'Conflicto con una carga reciente. No se guardó este lote.',
+                '57014': 'Supabase agotó el tiempo de consulta; requiere revisar el volumen de datos.',
+                'invalid_credentials': 'Usuario o contraseña incorrectos.',
+                'email_not_confirmed': 'La cuenta no tiene el correo confirmado.',
+            }
+            explanation = explanations.get(code, 'Copie esta línea de diagnóstico para revisar la causa; no comparta su contraseña.')
+            raise RuntimeError(f'HTTP {e.code} en {stage} [{code}]. {explanation}') from None
 
     def session(self, value):
         self.token = value['access_token']
@@ -66,6 +86,7 @@ class API:
             user += '@agrokasa.com.pe'
         self.session(self.request('/auth/v1/token?grant_type=password',
                                   {'email':user, 'password':getpass.getpass('Contraseña (no se guarda): ')}, False))
+        print('Inicio de sesión correcto. Comprobando permisos y tablas…', flush=True)
         self.request('/rest/v1/rpc/sync_produccion_snapshot', {})
 
 
