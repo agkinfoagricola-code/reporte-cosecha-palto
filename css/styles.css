@@ -157,6 +157,8 @@
   }
   .gf-buttons button:hover{ border-color:var(--pulpa); }
   .gf-buttons button.active{ background:var(--aguacate); border-color:var(--aguacate); color:#fff; }
+  .gf-buttons button.gf-toggle{ border-style:dashed; color:#8a8f83; font-weight:500; }
+  .gf-buttons button.gf-toggle:hover{ color:var(--pulpa); }
 
   canvas{ max-height:320px; }
 
@@ -383,3 +385,95 @@ body.theme-arandano table tbody tr:hover td{ background-color:rgba(91,42,134,.03
 
 .fila-total-tema{ background:#EEF3EE; }
 body.theme-arandano .fila-total-tema{ background:#F1EAF5; }
+
+/* Ciclos: filtros propios y navegación por páginas. */
+body:has(#page-ciclo.active) #globalFilter { display:none; }
+#page-ciclo .tablewrap { max-height:640px; }
+#tableCiclo th, #tableCiclo td { white-space:nowrap; }
+.ciclo-pager { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:12px; padding-top:14px; }
+
+/* Producción: dimensiones contenidas, contraste y jerarquía visual. */
+.content, main, .grid2 > *, .panel { min-width:0; }
+.grid2 { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); }
+.variety-ranking { display:none; }
+/* "Kg. Jabas" ahora es vista de toda la campaña, igual que "Kg. Bins" de Palto: una
+   sola fila de filtros (mismo patrón que .legacy-cosecha-filters en "Kg. Cosechados"),
+   sin panel de rango de fechas ni texto descriptivo aparte. Mercado + el conteo de
+   registros comparten esa única fila. Escondido para Palto porque no tiene ese
+   concepto. */
+.jabas-mercado-filter { display:none; }
+body.theme-arandano .jabas-mercado-filter { display:flex; align-items:center; }
+.jabas-mercado-filter #prod-status { font-size:12px; color:#81758b; }
+.jabas-mercado-filter #prod-status.is-error { color:#a54730; }
+body.theme-arandano {
+  --aguacate:#593387; --pulpa:#8055ba; --cielo:#087f8c; --linea:#e5e3ee;
+  --carbon:#29283b; --card:#fff;
+  background:#f5f6fb;
+}
+body.theme-arandano .sidebar { background:linear-gradient(165deg,#52307d,#342048); }
+body.theme-arandano .panel { box-shadow:0 5px 20px rgba(43,32,68,.035); border-radius:18px; }
+body.theme-arandano .content-header { border-bottom-color:#e9e6ef; }
+body.theme-arandano .panel h3 { color:#423055; font-size:16px; }
+/* "Kg. Jabas" ya no tiene sus propias tarjetas KPI — usa las mismas 7 (Kg Real/Ppto/
+   Diferencia/Total Jabas/Prom. Kg por Jaba/Kg por Jornal/%Cumplimiento) que el resto de
+   páginas de Arándano, en la misma grilla de 8 columnas (igual que Palto). */
+body.theme-arandano .gf-buttons { gap:6px; max-height:100px; overflow:auto; padding-bottom:4px; }
+body.theme-arandano .gf-buttons button { padding:6px 11px; font-size:11.5px; border-color:#e4deed; }
+body.theme-arandano .gf-buttons button.active { background:#674099; color:white; box-shadow:0 2px 7px #67409928; }
+/* "Kg. Jabas" ahora usa el filtro de Lote/Fecha "legacy" para su tabla de detalle
+   diario, igual que "Kg. Bins" de Palto (antes estaba oculto porque existía el panel
+   "Explora tu cosecha" con su propio Lote a nivel de página). */
+.production-chart { position:relative; min-width:0; height:340px; }
+.production-chart canvas { max-height:none; }
+body.theme-arandano #page-bins .grid2 { grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); }
+body.theme-arandano .production-weekly { max-height:340px; }
+.variety-ranking { height:340px; overflow:auto; padding-right:10px; }
+.variety-row { display:grid; grid-template-columns:minmax(90px,1fr) auto 62px; gap:7px 12px; padding:10px 0; border-bottom:1px solid #f0edf5; }
+.variety-name { font-size:11px; font-weight:600; color:#42394e; overflow-wrap:anywhere; display:flex; align-items:center; gap:8px; }
+.variety-name i { display:inline-block; width:8px; height:8px; flex-shrink:0; border-radius:50%; }
+.variety-amount { font-size:13px; font-weight:700; color:#352b44; font-variant-numeric:tabular-nums; text-align:right; }
+.variety-amount small { font-size:10px; font-weight:400; color:#85808c; }
+.variety-share { text-align:right; font-size:11px; color:#756984; font-variant-numeric:tabular-nums; }
+.variety-track { grid-column:1/-1; height:5px; background:#f1eff6; border-radius:5px; overflow:hidden; }
+.variety-track span { display:block; height:100%; min-width:2px; border-radius:5px; }
+body.theme-arandano #page-cosecha table,body.theme-arandano #page-bins table { font-size:12px; }
+body.theme-arandano #page-cosecha th,body.theme-arandano #page-bins th { background:#f7f5fb; color:#6e627d; white-space:nowrap; padding:11px 13px; z-index:2; }
+body.theme-arandano #page-cosecha td,body.theme-arandano #page-bins td { padding:11px 13px; white-space:nowrap; border-bottom-color:#efedf4; }
+body.theme-arandano #page-cosecha tbody tr:nth-child(even),body.theme-arandano #page-bins tbody tr:nth-child(even) { background:#fcfbfe; }
+body.theme-arandano #page-cosecha tr:hover td,body.theme-arandano #page-bins tr:hover td { background:#f0ebf8; }
+.production-total { background:#eee8f7; color:#56357d; font-weight:700; }
+.table-subdate { display:block; font-size:10px; color:#82798c; padding-top:3px; }
+/* Antes era un verde-azulado (#e8f4f2/#126b64) que desentonaba con el morado del resto
+   del tema Arándano — este badge solo se usa en "Kg. Jabas" (reportes-produccion.js). */
+.ratio-value { display:inline-block; min-width:42px; padding:4px 8px; border-radius:7px; background:#efe6f8; color:#6D3C96; font-weight:700; }
+.report-note { font-size:12px; color:#81758b; line-height:1.5; margin:0 0 14px; }
+.production-pager { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; padding-top:15px; font-size:12px; color:#746781; }
+.report-empty { text-align:center; padding:30px!important; color:#81758b; }
+@media(max-width:980px){
+ .grid2,body.theme-arandano #page-bins .grid2 { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:600px){
+ .production-chart { height:290px; }
+ .variety-row { gap:7px; grid-template-columns:minmax(70px,1fr) auto 53px; }
+}
+/* No forzar 100% del panel: con pocos Lote-Red (o pocas filas) la tabla se estiraba a
+   todo el ancho disponible aunque su contenido real fuera angosto, dejando celdas con
+   espacio vacío solo por "cubrir" pantalla. Ahora se ajusta a su contenido (table-layout:
+   auto ya hace que cada columna mida lo que necesita) y min-width solo actúa como piso
+   para cuando sí hay muchas columnas y no se quiere que se vea apretada. */
+body.theme-arandano #tableLoteRedDia,body.theme-arandano #tableBinsDia { width:auto; min-width:680px; max-width:100%; table-layout:auto; }
+body.theme-arandano #tableLoteRedDia th,body.theme-arandano #tableLoteRedDia td,
+body.theme-arandano #tableBinsDia th,body.theme-arandano #tableBinsDia td { width:auto; overflow:visible; text-overflow:clip; }
+body.theme-arandano #tableLoteRedDia th:first-child,body.theme-arandano #tableLoteRedDia td:first-child { min-width:132px; }
+
+/* Keep Chart.js inline display styles from exposing another crop's canvas. */
+#chartVariedad[hidden], #variedadRanking[hidden] { display:none !important; }
+.variety-ranking { box-sizing:border-box; }
+.variety-row { padding:13px 0; }
+.variety-name { font-size:12px; }
+.variety-amount { font-size:14px; }
+.variety-track { height:8px; background:#f0edf6; }
+.variety-track span { background-image:linear-gradient(90deg,#ffffff28,transparent)!important; }
+
+.sector-calculation-note { display:none; }
+body.theme-arandano .sector-calculation-note { display:block; color:#756984; font-size:12px; line-height:1.5; margin:0 0 12px; }

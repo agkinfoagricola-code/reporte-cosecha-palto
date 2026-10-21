@@ -152,18 +152,65 @@ function renderSectores(){
   }
 }
 
-/* ============ PAGE 5 (ARÁNDANO): DETALLE SECTORES — prorrateo por Ha ============
-   El presupuesto de Arándano (estimacionArandanoLoteRed) solo viene a nivel Lote-Red-Variedad
-   (no trae Sector — ver Excel de estimación), así que el Kg Ppto de cada Lote-Red-Variedad se
-   reparte entre sus sectores según su participación en la Hectarea total reportada por el
-   líder (computeSectorDetailsArandano) — el mismo criterio de prorrateo que usa Palto cuando
-   todavía no tiene bines cargados. El mismo % se aplica al Kg Real de balanza. Si en el futuro
-   se carga un comparativo de jabas por sector, se puede agregar acá un fallback igual al de
-   shareBinesPorLoteRed() en Palto. */
+/* Arándano: presupuesto repartido por área; kilos reales solo con sector
+   identificado. Los totales conservan los kilos de balanza del grupo. */
+
+let sectorReadings = null;
+let sectorHistory = null;
+let sectorReadingsLoading = false;
+let sectorReadingsError = false;
+const normalizeSectorId = value => String(value ?? '').trim().toUpperCase().replace(/^S(?:ECTOR)?\s*0*/, '').replace(/^0+(?=\d)/, '');
+function aggregateSectorReadings(rows){
+  const groups = new Map();
+  rows.forEach(r=>{
+    const sector = normalizeSectorId(r.sector);
+    if(!sector || !(Number(r.cantidad)>0) || !['EXP','NAC'].includes(r.destino)) return;
+    const key = [r.fecha,r.lote,r.red,r.variedad,r.destino].join('|');
+    if(!groups.has(key)) groups.set(key,new Map());
+    const counts = groups.get(key);
+    counts.set(sector,(counts.get(sector)||0)+Number(r.cantidad));
+  });
+  return groups;
+}
+async function loadSectorReadings(){
+  if(sectorReadings || sectorReadingsLoading || sectorReadingsError || typeof sb==='undefined') return;
+  sectorReadingsLoading = true;
+  try{
+    const {data,error} = await sb.from('lecturaind_arandano_data').select('data').eq('id',1).single();
+    if(error || !Array.isArray(data?.data)) throw new Error('Lecturas no disponibles');
+    sectorReadings = aggregateSectorReadings(data.data);
+  }catch(e){ sectorReadingsError = true; }
+  finally{
+    sectorReadingsLoading = false;
+    if(cultivoActivo==='arandano') renderSectoresArandano();
+  }
+}
+function sectorKgFromReadings(records,sector){
+  let kg=0,matched=false;
+  if(!sectorHistory) sectorHistory = aggregateSectorReadings(typeof SECTORES_HISTORICO==='undefined' ? [] : SECTORES_HISTORICO);
+  records.forEach(r=>{
+    ['EXP','NAC'].forEach(market=>{
+      const kilos = r[market==='EXP'?'kgExportable':'kgNacional'];
+      if(kilos==null || !Number.isFinite(Number(kilos))) return;
+      const key=[r.fecha,r.lote,r.red,r.variedad,market].join('|');
+      // Current readings replace the whole historical group, never add to it.
+      const counts=sectorReadings?.get(key) || sectorHistory.get(key);
+      if(!counts?.has(normalizeSectorId(sector))) return;
+      const total=[...counts.values()].reduce((sum,n)=>sum+n,0);
+      kg+=Number(kilos)*counts.get(normalizeSectorId(sector))/total;
+      matched=true;
+    });
+  });
+  return matched ? kg : null;
+}
+function formatSectorHa(value){
+  return Number(value).toLocaleString('en-US',{maximumFractionDigits:6});
+}
 function renderSectoresArandano(){
+  loadSectorReadings();
   const fLote = document.getElementById('f5-lote').value;
   const fRed = document.getElementById('f5-red').value;
-  const lotesAProcesar = fLote ? [String(fLote)] : uniq(estimacionArandanoLoteRed.map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
+  const lotesAProcesar = fLote ? [String(fLote)] : uniq([...estimacionArandanoLoteRed, ...computeSectorDetailsArandano()].map(e=>e.lote)).sort((a,b)=>Number(a)-Number(b)).map(String);
 
   let sectorDetails = computeSectorDetailsArandano().filter(s => lotesAProcesar.includes(String(s.lote)) && (!fRed || s.red===fRed));
 
@@ -191,52 +238,58 @@ function renderSectoresArandano(){
     const sectorDetailsDeLote = sectorDetails.filter(s=>String(s.lote)===lote);
     const reds = uniq(sectorDetailsDeLote.map(s=>s.red));
     reds.forEach(red=>{
-      const sectoresDeRed = sectorDetailsDeLote.filter(s=>s.red===red).sort((a,b)=> a.sector.localeCompare(b.sector));
+      const sectoresDeRed = sectorDetailsDeLote.filter(s=>s.red===red).sort((a,b)=> a.sector.localeCompare(b.sector, undefined, {numeric:true}));
       const variedadesDeRed = uniq(sectoresDeRed.map(s=>s.variedad))
         .filter(v=> activeVariedades.length===0 || activeVariedades.includes(v));
 
       variedadesDeRed.forEach(v=>{
         const e = estimacionArandanoLoteRed.find(x=> String(x.lote)===lote && x.red===red && x.variedad===v);
-        if(!e) return; // no hay presupuesto cargado para esta combinación Lote-Red-Variedad
+        // Sectores sin presupuesto también se muestran; no se inventa su meta.
 
         const sectoresDeVariedad = sectoresDeRed.filter(s=>s.variedad===v);
         const supSum = supSumByKey.get(lote+'-'+red+'-'+v) || 0;
 
         const kgRealTotal = balanza.filter(b=> String(b.lote)===lote && b.red===red && b.variedad===v).reduce((s,r)=>s+r.kg,0);
-        const haTotal = sectoresDeVariedad.reduce((s,x)=>s+x.superficie,0);
-        const kgPptoTotal = e.kgPpto;
-        const kgHaPpto = e.has>0 ? e.kgPpto/e.has : 0;
+        const haTotal = supSum;
+        const kgPptoTotal = e ? e.kgPpto : null;
+        const kgHaPpto = e && e.has>0 ? e.kgPpto/e.has : 0;
         const kgHaReal = haTotal>0 ? kgRealTotal/haTotal : 0;
         const cump = kgHaPpto>0 ? kgHaReal/kgHaPpto : 0;
 
         filas.push(`<tr style="background:#EEF3EE; font-weight:600;">
           <td colspan="2">Total Lote ${lote} - ${red} - ${v}</td>
-          <td class="num">${fmt1(haTotal)}</td>
-          <td class="num">${fmt(kgPptoTotal)}</td>
+          <td class="num">${formatSectorHa(haTotal)}</td>
+          <td class="num">${e ? fmt(kgPptoTotal) : '—'}</td>
           <td class="num">${fmt(kgRealTotal)}</td>
-          <td class="num">${fmt(kgHaPpto)}</td>
-          <td class="num">${fmt(kgHaReal)}</td>
-          <td>${estadoPill(cump)}</td>
+          <td class="num">${e ? fmt(kgHaPpto) : '—'}</td>
+          <td class="num">${haTotal>0 ? fmt(kgHaReal) : '—'}</td>
+          <td>${haTotal<=0 ? 'Sin hectáreas' : e ? estadoPill(cump) : 'Sin presupuesto'}</td>
           <td class="num">100%</td></tr>`);
 
         sectoresDeVariedad.forEach(s=>{
           const share = supSum>0 ? s.superficie/supSum : 0;
           const kgPptoSector = kgPptoTotal * share;
-          const kgRealSector = kgRealTotal * share;
+          const sectorId = value => String(value ?? '').trim().toUpperCase().replace(/^S(?:ECTOR)?\s*0*/, '').replace(/^0+(?=\d)/, '');
+          const records = balanza.filter(r => String(r.lote)===lote && r.red===red && r.variedad===v);
+          // A group total cannot be presented as measured sector production.
+          const identified = records.length>0 && records.every(r=>r.sector!=null && String(r.sector).trim()!=='');
+          const sectorRecords = records.filter(r=>sectorId(r.sector)===sectorId(s.sector));
+          const kgRealSector = identified && sectorRecords.length ? sectorRecords.reduce((sum,r)=>sum+r.kg,0) : sectorKgFromReadings(records,s.sector);
+          const estimated = !identified && kgRealSector!=null;
           const kgHaPptoSector = s.superficie>0 ? kgPptoSector/s.superficie : 0;
-          const kgHaRealSector = s.superficie>0 ? kgRealSector/s.superficie : 0;
+          const kgHaRealSector = kgRealSector!=null && s.superficie>0 ? kgRealSector/s.superficie : null;
           // % vs la meta del Lote-Red-Variedad completo (kgHaPpto), no el Kg Ppto/Ha
           // prorrateado de ESTE sector (que se cancela matemáticamente contra el real y
           // siempre daría el mismo % en todos los sectores).
           const ratioSector = kgHaPpto>0 ? kgHaRealSector/kgHaPpto : 0;
 
           filas.push(`<tr><td>L${String(s.lote).padStart(2,'0')} ${s.red} ${s.sector}</td><td>${v}</td>
-            <td class="num">${fmt1(s.superficie)}</td>
-            <td class="num">${fmt(kgPptoSector)}</td>
-            <td class="num">${fmt(kgRealSector)}</td>
-            <td class="num">${fmt(kgHaPptoSector)}</td>
-            <td class="num">${fmt(kgHaRealSector)}</td>
-            <td>${estadoPill(ratioSector)}</td>
+            <td class="num">${formatSectorHa(s.superficie)}</td>
+            <td class="num">${e ? fmt(kgPptoSector) : '—'}</td>
+            <td class="num" title="${estimated ? 'Asignado según participación sectorial del histórico o de las lecturas de la misma fecha y mercado' : ''}">${kgRealSector!=null ? fmt(kgRealSector)+(estimated?' *':'') : '—'}</td>
+            <td class="num">${e ? fmt(kgHaPptoSector) : '—'}</td>
+            <td class="num">${kgHaRealSector!=null ? fmt(kgHaRealSector)+(estimated?' *':'') : '—'}</td>
+            <td>${kgRealSector==null ? '—' : s.superficie<=0 ? 'Sin hectáreas' : e ? estadoPill(ratioSector) : 'Sin presupuesto'}</td>
             <td class="num">${pct(share)}</td></tr>`);
         });
       });

@@ -26,7 +26,14 @@ function renderKPIs(){
     const dif = kgReal - kgPpto;
     const cump = kgPpto>0 ? kgReal/kgPpto : 0;
     const envases = rows.reduce((s,r)=>s+(r.envases||0),0);
-    const promEnvase = envases>0 ? kgReal/envases : 0;
+    // "Prom. Kg / Jaba" solo con filas que sí tienen conteo de jabas (envases>0) —
+    // igual que comparableWeight() en reportes-produccion.js. Antes se dividía el kg de
+    // TODAS las filas (incluidas las que no tienen jabas registradas) entre la suma de
+    // envases, lo que inflaba el promedio.
+    const rowsConJaba = rows.filter(r=>r.envases>0);
+    const kgConJaba = rowsConJaba.reduce((s,r)=>s+r.kg,0);
+    const envasesConJaba = rowsConJaba.reduce((s,r)=>s+r.envases,0);
+    const promEnvase = envasesConJaba>0 ? kgConJaba/envasesConJaba : 0;
 
     // Kg/Jornal acumulado (igual que Palta, pero con jornales de Arándano: código
     // único 5129 ARA-COSECHADOR, sin split por variedad) — solo cuenta días con
@@ -110,7 +117,14 @@ function renderKPIs(){
 /* ============ PAGE 1: COSECHA ============ */
 
 /* ============ PAGE 1: COSECHA ============ */
+// Modelo único para Palto y Arándano: mismo KPI strip, mismo gráfico con tendencia,
+// mismo gráfico vertical "Acumulado por variedad" y mismo filtro de Lote (sin rango de
+// fechas ni Mercado — ese filtro extra sigue existiendo solo en "Kg. Jabas", ver
+// reportes-produccion.js). Las diferencias de cultivo (orden de Lote-Red, color del
+// mapa de calor) ya estaban resueltas más abajo en esta misma función.
 function renderCosecha(){
+  document.getElementById('chartVariedad').hidden = false;
+  document.getElementById('variedadRanking').hidden = true;
   const fLote = document.getElementById('f1-lote').value;
   const rows = balanza.filter(r => matchVariedad(r.variedad) && (!fLote || String(r.lote)===String(fLote)));
 
@@ -119,7 +133,21 @@ function renderCosecha(){
   drawBar('chartDia', dates, dates.map(d=>byDate.get(d)), 'Kg cosechados', getThemeColor('--pulpa', '#3F9E64'), true);
 
   const byVar = sumBy(rows, r=>r.variedad, r=>r.kg);
-  drawBar('chartVariedad', [...byVar.keys()], [...byVar.values()], 'Kg', getThemeColor('--aguacate', '#1B6B3C'), false, true);
+  // Arándano trae muchas variedades de bajo volumen (códigos de prueba, variedades
+  // nuevas con poca área) — con 20+ barras, la mayoría queda tan angosta que ni la
+  // barra ni su % se alcanzan a leer. Se grafican solo las top (mismo criterio y
+  // cantidad que el botón de Variedad, ver VARIEDADES_VISIBLES_ARANDANO en filters.js)
+  // y el resto se suma en una sola barra "Otros", para que el % de cada barra sea legible.
+  let chartVarLabels = [...byVar.keys()], chartVarValues = [...byVar.values()];
+  if(cultivoActivo === 'arandano' && byVar.size > VARIEDADES_VISIBLES_ARANDANO + 1){
+    const ordenadas = [...byVar.entries()].sort((a,b)=>b[1]-a[1]);
+    const top = ordenadas.slice(0, VARIEDADES_VISIBLES_ARANDANO);
+    const resto = ordenadas.slice(VARIEDADES_VISIBLES_ARANDANO);
+    const kgResto = resto.reduce((s,[,kg])=>s+kg, 0);
+    chartVarLabels = [...top.map(([v])=>v), `Otros (${resto.length})`];
+    chartVarValues = [...top.map(([,kg])=>kg), kgResto];
+  }
+  drawBar('chartVariedad', chartVarLabels, chartVarValues, 'Kg', getThemeColor('--aguacate', '#1B6B3C'), false, true);
 
   const lrDates = uniq(rows.map(r=>r.fecha)).sort().reverse();
   // Orden de columnas: el mismo orden de Lote-Red de la estimación de campaña (Lote
@@ -450,8 +478,8 @@ function exportBinsDiaToExcel(){
   const aoa = [headers];
   lastBinsDiaData.forEach(o=>{
     const cnt = esAra ? o.envases : o.bines;
-    const kgUnidad = cnt>0 ? o.kg/cnt : 0;
-    aoa.push([o.fecha, o.lote, o.red, o.variedad, cnt, Math.round(o.kg), round1(kgUnidad)]);
+    const kgUnidad = cnt>0 ? round1(o.kg/cnt) : '';
+    aoa.push([o.fecha, o.lote, o.red, o.variedad, cnt ?? '', Math.round(o.kg), kgUnidad]);
   });
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = headers.map(h => ({wch: Math.max(h.length+2, 10)}));
@@ -468,110 +496,5 @@ document.getElementById('exportBinsDiaBtn').addEventListener('click', exportBins
 // los mismos elementos del DOM que Palto (chartBinsLote, tableBinsSemana, f3-lote/fecha,
 // tableBinsDia, binsDiaPager) — configureCultivoUI() ya se encarga de renombrar los títulos.
 function renderJabasArandano(){
-  const rows = balanza.filter(r => matchVariedad(r.variedad));
-
-  const byLote = sumBy(rows, r=>'Lote '+r.lote, r=>r.kg);
-  const lotesSorted = [...byLote.keys()].sort((a,b)=> parseInt(a.replace('Lote ',''))-parseInt(b.replace('Lote ','')));
-  drawBar('chartBinsLote', lotesSorted, lotesSorted.map(l=>byLote.get(l)), 'Kg', getThemeColor('--aguacate', '#6E3F8B'), false, false, true);
-
-  const variedades = uniq(rows.map(r=>r.variedad));
-  const byWeekVar = new Map();
-  rows.forEach(r=>{
-    const w = isoWeekStart(r.fecha);
-    if(!w) return;
-    const k = w+'|'+r.variedad;
-    if(!byWeekVar.has(k)) byWeekVar.set(k, {kg:0, envases:0});
-    const o = byWeekVar.get(k); o.kg+=r.kg; o.envases+=(r.envases||0);
-  });
-  const weeks = uniq(rows.map(r=>isoWeekStart(r.fecha)).filter(Boolean)).sort().reverse();
-
-  const maxPorVariedad = {};
-  variedades.forEach(v=>{
-    maxPorVariedad[v] = Math.max(0, ...weeks.map(w=>{
-      const o = byWeekVar.get(w+'|'+v);
-      return o && o.envases>0 ? o.kg/o.envases : 0;
-    }));
-  });
-  const textShade = (v, max) => {
-    if(!v || max<=0) return 'inherit';
-    const t = Math.min(1, v/max);
-    return `rgba(110,63,139,${(0.45 + t*0.55).toFixed(2)})`;
-  };
-
-  let thead = '<tr><th>Semana</th>' + variedades.map(v=>`<th class="num">${v}</th>`).join('') + '</tr>';
-  let tbody = weeks.map(w=>{
-    const cells = variedades.map(v=>{
-      const o = byWeekVar.get(w+'|'+v);
-      const avg = o && o.envases>0 ? o.kg/o.envases : null;
-      const color = avg ? textShade(avg, maxPorVariedad[v]) : 'inherit';
-      return `<td class="num" style="color:${color}; font-weight:600;">${avg? fmt1(avg):'—'}</td>`;
-    }).join('');
-    return `<tr><td>${weekLabel(w)} <span style="color:#8a8f83; font-size:11px;">(${w})</span></td>${cells}</tr>`;
-  }).join('');
-  document.getElementById('tableBinsSemana').innerHTML = thead + tbody;
-
-  const byDayLR = new Map();
-  rows.forEach(r=>{
-    const k = r.fecha+'|'+r.lote+'|'+r.red+'|'+r.variedad;
-    if(!byDayLR.has(k)) byDayLR.set(k, {kg:0, envases:0, fecha:r.fecha, lote:r.lote, red:r.red, variedad:r.variedad});
-    const o = byDayLR.get(k); o.kg+=r.kg; o.envases+=(r.envases||0);
-  });
-  let allDayRows = [...byDayLR.values()].sort((a,b)=> b.fecha.localeCompare(a.fecha));
-
-  const selLote3 = document.getElementById('f3-lote');
-  const lotesJabas = uniq(allDayRows.map(r=>r.lote)).sort((a,b)=>Number(a)-Number(b));
-  const prevLote3 = selLote3.value;
-  selLote3.innerHTML = '<option value="">Todos los lotes</option>' + lotesJabas.map(l=>`<option value="${l}">Lote ${l}</option>`).join('');
-  if(lotesJabas.map(String).includes(prevLote3)) selLote3.value = prevLote3;
-  const fLote3 = selLote3.value;
-  const fFecha3 = document.getElementById('f3-fecha').value;
-
-  const dayRowsFiltradas = allDayRows.filter(o =>
-    (!fLote3 || String(o.lote)===String(fLote3)) && (!fFecha3 || o.fecha===fFecha3)
-  );
-
-  const maxEnvases = Math.max(0, ...dayRowsFiltradas.map(o=>o.envases));
-  const maxKg = Math.max(0, ...dayRowsFiltradas.map(o=>o.kg));
-  const maxKgEnvase = Math.max(0, ...dayRowsFiltradas.map(o=> o.envases>0 ? o.kg/o.envases : 0));
-  const textShadeMorado = (v, max) => {
-    if(!v || max<=0) return 'inherit';
-    return `rgba(110,63,139,${(0.45 + Math.min(1,v/max)*0.55).toFixed(2)})`;
-  };
-
-  const PAGE_SIZE = 30;
-  const totalPaginas = Math.max(1, Math.ceil(dayRowsFiltradas.length / PAGE_SIZE));
-  if(binsDiaPage >= totalPaginas) binsDiaPage = totalPaginas - 1;
-  if(binsDiaPage < 0) binsDiaPage = 0;
-  const pageRows = dayRowsFiltradas.slice(binsDiaPage*PAGE_SIZE, binsDiaPage*PAGE_SIZE + PAGE_SIZE);
-
-  let thead2 = '<tr><th>Fecha</th><th>Lote</th><th>Red</th><th>Variedad</th><th class="num">Jabas</th><th class="num">Kg</th><th class="num">Kg/Jaba</th></tr>';
-  let tbody2 = pageRows.map(o=>{
-    const kgEnvase = o.envases>0 ? o.kg/o.envases : null;
-    const bgEnvases = heatShade(o.envases, maxEnvases, '110,63,139');
-    const bgKg = heatShade(o.kg, maxKg, '110,63,139');
-    const colorEnvases = o.envases/maxEnvases > 0.55 ? '#fff' : 'inherit';
-    const colorKg = o.kg/maxKg > 0.55 ? '#fff' : 'inherit';
-    const colorKgEnvase = kgEnvase ? textShadeMorado(kgEnvase, maxKgEnvase) : 'inherit';
-    return `<tr><td>${o.fecha}</td><td>${o.lote}</td><td>${o.red}</td><td>${o.variedad}</td>
-      <td class="num" style="background:${bgEnvases}; color:${colorEnvases};">${o.envases}</td>
-      <td class="num" style="background:${bgKg}; color:${colorKg};">${fmt(o.kg)}</td>
-      <td class="num" style="color:${colorKgEnvase}; font-weight:600;">${kgEnvase? fmt1(kgEnvase):'—'}</td></tr>`;
-  }).join('');
-  document.getElementById('tableBinsDia').innerHTML = thead2 + tbody2;
-
-  const pagerEl = document.getElementById('binsDiaPager');
-  if(totalPaginas <= 1){
-    pagerEl.innerHTML = '';
-  } else {
-    pagerEl.innerHTML = `
-      <button class="btn btn-ghost" id="binsDiaPrev" style="padding:6px 12px;" ${binsDiaPage===0?'disabled':''}>‹ Anterior</button>
-      <span>Página ${binsDiaPage+1} de ${totalPaginas} <span style="color:#8a8f83;">(${dayRowsFiltradas.length} filas)</span></span>
-      <button class="btn btn-ghost" id="binsDiaNext" style="padding:6px 12px;" ${binsDiaPage>=totalPaginas-1?'disabled':''}>Siguiente ›</button>`;
-    document.getElementById('binsDiaPrev').addEventListener('click', ()=>{ binsDiaPage--; renderJabasArandano(); });
-    document.getElementById('binsDiaNext').addEventListener('click', ()=>{ binsDiaPage++; renderJabasArandano(); });
-  }
-
-  lastBinsDiaData = dayRowsFiltradas;
+  renderJabasProduccion();
 }
-
-/* ============ PAGE 4: AVANCE HA ============ */

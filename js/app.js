@@ -79,6 +79,10 @@ document.getElementById('sidebar').addEventListener('click', e=>{
   const ARA_PAGE_TITLES = { bins: 'Kg. Jabas', calibres: 'Calibres de Fruto' };
   document.getElementById('pageTitle').textContent = (esAraTitle && ARA_PAGE_TITLES[btn.dataset.page]) || PAGE_TITLES[btn.dataset.page] || '';
   if(btn.dataset.page === 'usuarios') loadUsersList();
+  renderKPIs();
+  // "Kg. Cosechados" ya usa el modelo único (renderCosecha, llamado por renderKPIs arriba
+  // y por renderAll) — el filtro de fechas/Mercado y sus propios KPIs quedan solo en "Kg. Jabas".
+  if(cultivoActivo === 'arandano' && btn.dataset.page === 'bins') refreshProductionReports();
   closeSidebarMobile();
 });
 

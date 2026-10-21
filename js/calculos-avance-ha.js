@@ -144,13 +144,13 @@ function computeHaAvancePorLoteRed(source){
    reportado cuenta con el 100% de su Hectarea activa — no hay "Ha Real" distinta de "Ha Ppto"
    a nivel sector, así que esta vista solo necesita una columna de Ha por sector. */
 function computeSectorDetailsArandano(){
-  const bySector = new Map(); // "lote|red|sector" -> {lote, red, sector, variedad, superficie}
-  hectareasArandano.forEach(h=>{
-    const key = h.lote+'|'+h.red+'|'+h.sector;
-    if(!bySector.has(key)) bySector.set(key, { lote: h.lote, red: h.red, sector: h.sector, variedad: h.variedad, superficie: 0 });
+  const bySector = new Map();
+  avancesArandanoConReferencia().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).forEach(h=>{
+    const key = [h.lote,h.red,h.sector,h.variedad].join('|');
+    if(!bySector.has(key)) bySector.set(key, {lote:h.lote, red:h.red, sector:h.sector,
+      variedad:h.variedad, superficie:0});
     const o = bySector.get(key);
-    o.superficie = Math.max(o.superficie, h.superficie || 0);
-    if(!o.variedad) o.variedad = h.variedad;
+    if(h.superficie != null) o.superficie = h.superficie;
   });
   return [...bySector.values()];
 }
