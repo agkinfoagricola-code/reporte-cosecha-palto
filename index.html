@@ -108,6 +108,9 @@
     <section class="global-filter" id="globalFilter">
       <span class="gf-label">Variedad:</span>
       <div class="gf-buttons" id="gfButtons"></div>
+      <span class="gf-label gf-mercado" style="display:none;">Mercado:</span>
+      <div class="gf-buttons gf-mercado" id="gfMercado" style="display:none;"></div>
+      <span class="gf-mercado-nota" id="gfMercadoNota" role="status" aria-live="polite"></span>
     </section>
 
     <main>
@@ -174,10 +177,9 @@
 
     <!-- Vista de toda la campaña, igual que "Kg. Bins" de Palto (una sola fila de
          filtros, mismo patrón que el resto de páginas — ver .legacy-cosecha-filters en
-         "Kg. Cosechados"). Mercado se mantiene como filtro secundario porque es
-         información propia de Arándano (Exportable/Nacional) que Palto no tiene. -->
+         "Kg. Cosechados"). El Mercado (Exportable/Nacional) ahora es un filtro global
+         de Arándano, en la barra de Variedad (ver populateMercadoFilter()). -->
     <div class="filters jabas-mercado-filter" style="margin-top:0;">
-      <select id="prod-mercado"><option value="">Todos los mercados</option><option value="EXP">Exportable</option><option value="NAC">Mercado nacional</option></select>
       <span id="prod-status" role="status" aria-live="polite"></span>
     </div>
 
@@ -428,6 +430,15 @@
         sin afectar los datos de palto.
       </p>
       <input type="file" id="fileBalanzaArandano" accept=".xlsx,.xls">
+      <label>Excel de Mercado Nacional - Arándano (retiro en campo)</label>
+      <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
+        Fruta de mercado nacional que se retira en campo y <b>no pasa por la balanza</b>. Columnas
+        <b>ID, LOTE RED VAR (ej. 07-2-AV), FECHA COSECHA, CNT y KILOS</b>. La variedad se toma del
+        código (AV, AE…) según la balanza. Es acumulado de campaña: al guardar reemplaza el
+        nacional cargado antes. Los kilos se suman al exportable (el ppto incluye ambos); usa el
+        filtro <b>Mercado</b> para verlos por separado.
+      </p>
+      <input type="file" id="fileNacionalArandano" accept=".xlsx,.xls">
       <label>Excel de Presupuesto Has/Kg por Lote-Red (Arándano)</label>
       <p style="font-size:12px; color:#555; margin:0 0 6px 0; line-height:1.5;">
         Usa el archivo real de <b>Estimación de Producción por Lote-Red-Variedad</b> (hoja

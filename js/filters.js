@@ -70,6 +70,35 @@ function populateFilters(){
   selLote.innerHTML = '<option value="">Todos los lotes</option>' + lotesOrdenados.map(l=>`<option value="${l}">Lote ${l}</option>`).join('');
   if(lotes.map(String).includes(prev)) selLote.value = prev;
   populateSectorFilters();
+  populateMercadoFilter();
+}
+
+// Filtro global de Mercado (solo Arándano). Reconstruye `balanza` (exportable de la balanza +
+// nacional retirado en campo, ver buildBalanzaArandano() en state.js) y re-renderiza todo,
+// así todas las páginas lo respetan sin tocar cada vista. "Todos" es el valor por defecto
+// porque el presupuesto de Arándano incluye ambos mercados.
+const MERCADO_OPCIONES = [{v:'', label:'Todos'}, {v:'EXP', label:'Exportable'}, {v:'NAC', label:'Nacional'}];
+function populateMercadoFilter(){
+  const esAra = cultivoActivo === 'arandano';
+  document.querySelectorAll('.gf-mercado').forEach(el=> el.style.display = esAra ? '' : 'none');
+  const cont = document.getElementById('gfMercado');
+  const nota = document.getElementById('gfMercadoNota');
+  if(!cont) return;
+  if(!esAra){ cont.innerHTML = ''; if(nota) nota.textContent = ''; return; }
+  cont.innerHTML = MERCADO_OPCIONES.map(o=>`<button data-m="${o.v}" class="${mercadoActivo===o.v?'active':''}">${o.label}</button>`).join('');
+  cont.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
+    if(mercadoActivo === btn.dataset.m) return;
+    mercadoActivo = btn.dataset.m;
+    balanza = balanzaActiva();
+    renderAll();
+  }));
+  if(nota){
+    nota.textContent = !nacionalArandano.length && mercadoActivo !== 'EXP'
+      ? 'Aún no se ha cargado el Excel de mercado nacional (Actualizar datos).'
+      : mercadoActivo
+        ? 'El presupuesto es exportable + nacional: con este filtro el Kg Ppto y el % de cumplimiento se comparan contra el total.'
+        : '';
+  }
 }
 
 function isVariedadBtnActive(v){

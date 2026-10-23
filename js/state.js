@@ -2,6 +2,45 @@
 let balanzaPalto = DEFAULT_BALANZA;
 let balanzaArandano = [];
 let balanza = balanzaPalto;
+// Mercado nacional de Arándano: fruta que se retira en campo y NO pasa por la balanza de
+// exportación (no se duplica con balanzaArandano). El presupuesto de Arándano es la suma de
+// exportable + nacional, así que por defecto ambos se ven juntos ("Todos"); el filtro global
+// de Mercado permite separarlos. Formato: {id, fecha, lote, red, referencia, codVar, kg,
+// envases (null si el conteo no es confiable), envasesRaw, mercado:'NAC'} — la variedad se
+// resuelve contra los códigos de la balanza (ver variedadesPorCodigoArandano()).
+let nacionalArandano = [];
+let mercadoActivo = ''; // '' = Todos, 'EXP' = Exportable (balanza), 'NAC' = Nacional
+
+// Código de variedad de la referencia de campo ("07-2-AV" → "AV") → nombre de variedad
+// según la balanza (Nombre Familia). Si un código aparece con más de un nombre se toma el
+// de más kilos.
+function variedadesPorCodigoArandano(){
+  const votos = new Map();
+  balanzaArandano.forEach(r=>{
+    const cod = String(r.referencia||'').split('-')[2];
+    if(!cod || !r.variedad) return;
+    const k = cod.trim().toUpperCase();
+    if(!votos.has(k)) votos.set(k, new Map());
+    const m = votos.get(k); m.set(r.variedad, (m.get(r.variedad)||0) + (r.kg||0) + 1e-9);
+  });
+  const map = new Map();
+  votos.forEach((m,cod)=> map.set(cod, [...m.entries()].sort((a,b)=>b[1]-a[1])[0][0]));
+  return map;
+}
+function nacionalArandanoNormalizado(){
+  const map = variedadesPorCodigoArandano();
+  return nacionalArandano.map(r=>({...r, variedad: map.get(r.codVar) || r.codVar, mercado:'NAC'}));
+}
+function buildBalanzaArandano(){
+  const exp = balanzaArandano.map(r=> r.mercado ? r : {...r, mercado:'EXP'});
+  if(mercadoActivo === 'EXP') return exp;
+  const nac = nacionalArandanoNormalizado();
+  if(mercadoActivo === 'NAC') return nac;
+  return exp.concat(nac);
+}
+function balanzaActiva(){
+  return cultivoActivo === 'arandano' ? buildBalanzaArandano() : balanzaPalto;
+}
 let hectareas = DEFAULT_HECTAREAS;
 // Avance de campo (Lote-Red-Sector) y presupuesto de Ha/Kg por Lote-Red para Arándano —
 // independientes de los de Palto. Vacíos hasta que el admin cargue sus Excel (ver

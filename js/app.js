@@ -132,7 +132,7 @@ function renderSidebarSelectors(){
   cultivoEl.value = cultivoActivo;
   cultivoEl.addEventListener('change', ()=>{
     cultivoActivo = cultivoEl.value;
-    balanza = cultivoActivo === 'arandano' ? balanzaArandano : balanzaPalto;
+    balanza = balanzaActiva();
     activeVariedades = [];
     renderAll();
   });

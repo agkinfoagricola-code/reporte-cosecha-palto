@@ -2,7 +2,7 @@
 document.getElementById('resetBtn').addEventListener('click', async ()=>{
   if(currentRole !== 'admin') return;
   if(!confirm('Esto restablece los datos de balanza y hectáreas a la base (30-jun-2026) para TODOS los usuarios. ¿Continuar?')) return;
-  balanzaPalto = DEFAULT_BALANZA; balanza = cultivoActivo === 'arandano' ? balanzaArandano : balanzaPalto; hectareas = DEFAULT_HECTAREAS; tareo = DEFAULT_TAREO; calibres = DEFAULT_CALIBRES; bines = DEFAULT_BINES;
+  balanzaPalto = DEFAULT_BALANZA; balanza = balanzaActiva(); hectareas = DEFAULT_HECTAREAS; tareo = DEFAULT_TAREO; calibres = DEFAULT_CALIBRES; bines = DEFAULT_BINES;
   try{
     await sb.from('balanza_data').update({ data: DEFAULT_BALANZA, updated_by: currentUser.email }).eq('id', 1);
     await sb.from('hectareas_data').update({ data: DEFAULT_HECTAREAS, updated_by: currentUser.email }).eq('id', 1);
@@ -136,6 +136,52 @@ function parseBalanzaArandanoRows(rows){
       envases: kEnv ? (parseInt(r[kEnv]) || 0) : 0,
     };
   }).filter(r=>r.lote && r.fecha && r.variedad);
+}
+
+// Mercado nacional de Arándano (fruta retirada en campo, fuera de la balanza de exportación).
+// Columnas: ID, LOTE RED VAR ("07-2-AV"), FECHA COSECHA, CNT (jabas), KILOS. El archivo es
+// acumulado de toda la campaña, así que al guardar REEMPLAZA todo (igual que la balanza);
+// si un ID se repite se queda la última fila. Los kilos siempre suman; las jabas solo se
+// usan cuando el peso por jaba es físicamente posible (ver NACIONAL_KG_JABA_*), para que
+// errores de digitación (707 kg en 3 jabas, jabas invertidas con kilos…) no distorsionen
+// el "Prom. Kg / Jaba".
+const NACIONAL_KG_JABA_MIN = 1;
+const NACIONAL_KG_JABA_MAX = 5;
+function parseNacionalArandanoRows(rows){
+  if(!rows.length) return [];
+  const sample = rows[0];
+  const kId = findKey(sample, ['ID']);
+  const kRef = findKey(sample, ['LOTE RED VAR','Lote Red Var','LOTE-RED-VAR','Referencia']);
+  const kFecha = findKey(sample, ['FECHA COSECHA','Fecha Cosecha','FechaCosecha','Fecha']);
+  const kCnt = findKey(sample, ['CNT','Jabas','Envases']);
+  const kKg = findKey(sample, ['KILOS','Kilos','kg']);
+  if(!kRef || !kFecha || !kKg) throw new Error('Faltan columnas esperadas en el Excel de mercado nacional (LOTE RED VAR, FECHA COSECHA, CNT, KILOS).');
+  const porId = new Map();
+  rows.forEach((r,i)=>{
+    const ref = String(r[kRef]||'').trim().toUpperCase();
+    const partes = ref.split('-').map(p=>p.trim()).filter(Boolean);
+    if(partes.length < 3) return; // fila de total o sin referencia
+    const lote = parseInt(partes[0].replace(/[^0-9]/g,''));
+    const redNum = partes[1].replace(/[^0-9]/g,'');
+    const fecha = formatDateCell(r[kFecha]);
+    const kg = parseFloat(r[kKg]) || 0;
+    if(!lote || !redNum || !fecha) return;
+    const cnt = kCnt ? (parseInt(r[kCnt]) || 0) : 0;
+    const ratio = cnt > 0 ? kg / cnt : null;
+    const confiable = ratio != null && ratio >= NACIONAL_KG_JABA_MIN && ratio <= NACIONAL_KG_JABA_MAX;
+    const id = kId && r[kId] !== '' && r[kId] != null ? String(r[kId]) : 'fila-' + i;
+    porId.set(id, {
+      id, fecha, lote,
+      red: 'R' + redNum.padStart(2,'0'),
+      referencia: ref,
+      codVar: partes.slice(2).join('-'),
+      kg,
+      envases: confiable ? cnt : null,
+      envasesRaw: cnt,
+      mercado: 'NAC',
+    });
+  });
+  return [...porId.values()];
 }
 
 // Lee el Excel de estimación de Arándano tolerando filas de título/versión antes del
@@ -599,6 +645,7 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   }
   const fileBal = document.getElementById('fileBalanza').files[0];
   const fileBalAra = document.getElementById('fileBalanzaArandano').files[0];
+  const fileNacAra = document.getElementById('fileNacionalArandano').files[0];
   const fileEstAra = document.getElementById('fileEstimacionArandano').files[0];
   const fileHaAra = document.getElementById('fileHectareasArandano').files[0];
   const fileCalAra = document.getElementById('fileCalibresArandano').files[0];
@@ -607,10 +654,11 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
   const fileTareoList = [...tareoCola];
   const fileCal = document.getElementById('fileCalibres').files[0];
   const fileBines = document.getElementById('fileBines').files[0];
-  if(!fileBal && !fileBalAra && !fileEstAra && !fileHaAra && !fileCalAra && !fileTareoAraList.length && !fileHa && !fileTareoList.length && !fileCal && !fileBines){
+  if(!fileBal && !fileBalAra && !fileNacAra && !fileEstAra && !fileHaAra && !fileCalAra && !fileTareoAraList.length && !fileHa && !fileTareoList.length && !fileCal && !fileBines){
     statusEl.className='status-msg err'; statusEl.textContent='Selecciona al menos un archivo Excel para actualizar.'; return;
   }
   statusEl.className='status-msg'; statusEl.textContent='Leyendo archivo(s)…';
+  const avisosCarga = [];
   try{
     if(fileBal){
       const rows = await readExcelFile(fileBal);
@@ -628,7 +676,22 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
       const { error } = await sb.from('balanza_arandano_data').update({ data: parsed, updated_by: currentUser.email }).eq('id', 1);
       if(error) throw new Error(error.message);
       balanzaArandano = parsed;
-      if(cultivoActivo === 'arandano') balanza = balanzaArandano;
+      if(cultivoActivo === 'arandano') balanza = balanzaActiva();
+    }
+    if(fileNacAra){
+      const rows = await readExcelFile(fileNacAra);
+      const parsed = parseNacionalArandanoRows(rows);
+      if(!parsed.length) throw new Error('El Excel de mercado nacional no tiene filas válidas.');
+      const { error } = await sb.from('nacional_arandano_data').update({ data: parsed, updated_by: currentUser.email }).eq('id', 1);
+      if(error) throw new Error(error.message);
+      nacionalArandano = parsed;
+      if(cultivoActivo === 'arandano') balanza = balanzaActiva();
+      const sinJabas = parsed.filter(r=>r.kg>0 && r.envases==null).length;
+      const codigos = variedadesPorCodigoArandano();
+      const sinVariedad = uniq(parsed.filter(r=>!codigos.has(r.codVar)).map(r=>r.codVar));
+      avisosCarga.push(`Mercado nacional: ${parsed.length} registros, ${fmt(parsed.reduce((s,r)=>s+r.kg,0))} kg`
+        + (sinJabas ? ` · ${sinJabas} sin conteo de jabas confiable (kg sí suman)` : '')
+        + (sinVariedad.length ? ` · códigos sin variedad en balanza: ${sinVariedad.join(', ')}` : '') + '.');
     }
     if(fileEstAra){
       const rows = await readEstimacionArandanoWorkbook(fileEstAra);
@@ -728,11 +791,13 @@ document.getElementById('applyUpdate').addEventListener('click', async ()=>{
     const stamp = new Date().toLocaleString('es-PE', {dateStyle:'short', timeStyle:'short'});
     document.getElementById('updatedChip').textContent = 'Datos actualizados: ' + stamp;
     statusEl.className='status-msg ok'; statusEl.textContent='Datos guardados y aplicados para todos los usuarios.';
+    if(avisosCarga.length) statusEl.textContent += ' ' + avisosCarga.join(' ');
     if(fileTareoList.length && tareoOmitidos.length){
       statusEl.textContent += ` Se omitieron ${tareoOmitidos.length} archivo(s) de tareo: ` + tareoOmitidos.join(' | ');
     }
     document.getElementById('fileBalanza').value = '';
     document.getElementById('fileBalanzaArandano').value = '';
+    document.getElementById('fileNacionalArandano').value = '';
     document.getElementById('fileEstimacionArandano').value = '';
     document.getElementById('fileHectareasArandano').value = '';
     document.getElementById('fileCalibresArandano').value = '';

@@ -16,6 +16,15 @@ async function loadStoredData(){
       if(araRow.updated_at) timestamps.push(araRow.updated_at);
     }
   }catch(e){}
+  // Mercado nacional de Arándano (opcional): si la tabla aún no existe en Supabase, la
+  // consulta falla en silencio y el dashboard sigue mostrando solo la balanza.
+  try{
+    const { data: nacRow } = await sb.from('nacional_arandano_data').select('data, updated_at').eq('id', 1).single();
+    if(nacRow && Array.isArray(nacRow.data)){
+      nacionalArandano = nacRow.data;
+      if(nacRow.data.length && nacRow.updated_at) timestamps.push(nacRow.updated_at);
+    }
+  }catch(e){}
   try{
     const { data: haRow } = await sb.from('hectareas_data').select('data, updated_at').eq('id', 1).single();
     if(haRow && Array.isArray(haRow.data) && haRow.data.length){
@@ -73,7 +82,7 @@ async function loadStoredData(){
     }
   }catch(e){}
 
-  balanza = cultivoActivo === 'arandano' ? balanzaArandano : balanzaPalto;
+  balanza = balanzaActiva();
 
   if(timestamps.length){
     const masReciente = new Date(Math.max(...timestamps.map(t=> new Date(t).getTime())));

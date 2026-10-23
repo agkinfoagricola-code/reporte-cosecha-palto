@@ -477,3 +477,10 @@ body.theme-arandano #tableLoteRedDia th:first-child,body.theme-arandano #tableLo
 
 .sector-calculation-note { display:none; }
 body.theme-arandano .sector-calculation-note { display:block; color:#756984; font-size:12px; line-height:1.5; margin:0 0 12px; }
+
+/* Filtro global de Mercado (solo Arándano): Todos / Exportable / Nacional. Va en la misma
+   barra que Variedad, separado por un margen. */
+.gf-label.gf-mercado{ margin-left:18px; }
+#gfMercado{ flex-wrap:nowrap; max-height:none; overflow:visible; }
+.gf-mercado-nota{ flex-basis:100%; font-size:12px; color:#8a6d1f; }
+.gf-mercado-nota:empty{ display:none; }

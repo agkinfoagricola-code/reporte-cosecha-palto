@@ -474,18 +474,23 @@ function exportBinsDiaToExcel(){
   }
   const esAra = cultivoActivo === 'arandano';
   const unidad = esAra ? 'Jaba' : 'Bin';
-  const headers = ['Fecha', 'Lote', 'Red', 'Variedad', esAra ? 'Jabas' : 'Bins', 'Kg', `Kg/${unidad}`];
+  const headers = esAra
+    ? ['Fecha', 'Lote', 'Red', 'Variedad', 'Mercado', 'Jabas', 'Kg', `Kg/${unidad}`]
+    : ['Fecha', 'Lote', 'Red', 'Variedad', 'Bins', 'Kg', `Kg/${unidad}`];
   const aoa = [headers];
   lastBinsDiaData.forEach(o=>{
     const cnt = esAra ? o.envases : o.bines;
     const kgUnidad = cnt>0 ? round1(o.kg/cnt) : '';
-    aoa.push([o.fecha, o.lote, o.red, o.variedad, cnt ?? '', Math.round(o.kg), kgUnidad]);
+    const base = [o.fecha, o.lote, o.red, o.variedad];
+    if(esAra) base.push(o.mercado === 'NAC' ? 'Nacional' : 'Exportable');
+    aoa.push([...base, cnt ?? '', Math.round(o.kg), kgUnidad]);
   });
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = headers.map(h => ({wch: Math.max(h.length+2, 10)}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, `Detalle diario ${unidad.toLowerCase()}`);
-  const varSuffix = activeVariedades.length ? '_' + activeVariedades.join('-') : '_Todas';
+  const varSuffix = (activeVariedades.length ? '_' + activeVariedades.join('-') : '_Todas')
+    + (esAra && mercadoActivo ? '_' + (mercadoActivo === 'NAC' ? 'Nacional' : 'Exportable') : '');
   const stamp = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `Detalle_diario_${unidad.toLowerCase()}${varSuffix}_${stamp}.xlsx`);
 }
